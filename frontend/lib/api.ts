@@ -1,0 +1,188 @@
+export interface DatasetSummary {
+  data_type: string;
+  row_count: number;
+  total_gmv?: number;
+  total_orders?: number;
+  avg_order_value?: number;
+  overall_conversion_rate?: number;
+  creator_count?: number;
+  avg_roi?: number;
+  producing_rate?: number;
+  top10_products?: { product: string; gmv: number }[];
+  top10_creators?: { creator: string; gmv: number; roi?: number }[];
+  daily_gmv_trend?: { date: string; gmv: number }[];
+  [key: string]: unknown;
+}
+
+export interface Dataset {
+  id: string;
+  filename: string;
+  data_type: "shop" | "creator";
+  row_count: number;
+  columns: string[];
+  summary: DatasetSummary;
+  created_at: string;
+}
+
+export interface Report {
+  id: string;
+  dataset_id: string;
+  report_type: "weekly" | "monthly";
+  status: "pending" | "running" | "done" | "failed";
+  content_md: string;
+  error: string;
+  created_at: string;
+}
+
+// 生产：从环境变量 NEXT_PUBLIC_API_URL 读取后端基址（如 https://ai-shop-backend.onrender.com）
+// 开发：未设置时为空字符串，请求走 next.config.mjs 的 rewrite 代理到 localhost:8000
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
+
+export async function createAnalysis(datasetId: string, reportType: "weekly" | "monthly") {
+  const res = await fetch(`${BASE}/api/analyze/${datasetId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ report_type: reportType }),
+  });
+  if (!res.ok) throw new Error((await res.json()).detail ?? "创建分析任务失败");
+  return (await res.json()) as Report;
+}
+
+export async function getReport(reportId: string) {
+  const res = await fetch(`${BASE}/api/reports/${reportId}`, { cache: "no-store" });
+  if (!res.ok) throw new Error("获取报告失败");
+  return (await res.json()) as Report;
+}
+
+/** 上传文件，带进度回调（fetch 不支持上传进度，用 XHR） */
+export function uploadFile(
+  file: File,
+  dataType: "shop" | "creator",
+  onProgress: (percent: number) => void
+): Promise<{ dataset: Dataset; message: string }> {
+  return new Promise((resolve, reject) => {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("data_type", dataType);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${BASE}/api/upload`);
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () => {
+      try {
+        const body = JSON.parse(xhr.responseText);
+        if (xhr.status >= 200 && xhr.status < 300) resolve(body);
+        else reject(new Error(body.detail ?? `上传失败 (${xhr.status})`));
+      } catch {
+        reject(new Error(`上传失败 (${xhr.status})`));
+      }
+    };
+    xhr.onerror = () => reject(new Error("网络错误，请确认后端已启动"));
+    xhr.send(form);
+  });
+}
+
+// ===================== Dashboard 看板 =====================
+export interface Kpi {
+  key: string;
+  label: string;
+  value: number;
+  delta_pct: number | null;
+  higher_is_better: boolean;
+  format: "currency" | "int" | "percent";
+}
+
+export interface DashboardOverview {
+  period: { start: string; end: string; days: number };
+  previous_period: { start: string; end: string };
+  kpis: Kpi[];
+}
+
+export interface GmvPoint {
+  date: string;
+  gmv: number;
+}
+
+export interface TopProduct {
+  product: string;
+  gmv: number;
+  orders: number;
+}
+
+export interface InfluencerPoint {
+  creator_id: string;
+  name: string;
+  category: string;
+  engagement_rate: number; // 百分比数值，如 4.0 表示 4%
+  conversion_rate: number; // 百分比数值，如 0.40 表示 0.4%
+  gmv: number;
+  roi: number | null;
+  followers: number;
+  is_suspicious: boolean;
+}
+
+export async function getDashboardOverview(days = 30): Promise<DashboardOverview> {
+  const res = await fetch(`${BASE}/api/dashboard/overview?days=${days}`, { cache: "no-store" });
+  if (!res.ok) throw new Error("获取 KPI 失败");
+  return (await res.json()) as DashboardOverview;
+}
+
+export async function getGmvTrend(days = 30): Promise<GmvPoint[]> {
+  const res = await fetch(`${BASE}/api/dashboard/gmv-trend?days=${days}`, { cache: "no-store" });
+  if (!res.ok) throw new Error("获取 GMV 趋势失败");
+  const d = (await res.json()) as { series: GmvPoint[] };
+  return d.series;
+}
+
+export async function getTopProducts(limit = 10, days = 30): Promise<TopProduct[]> {
+  const res = await fetch(`${BASE}/api/dashboard/top-products?limit=${limit}&days=${days}`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("获取 Top 商品失败");
+  const d = (await res.json()) as { items: TopProduct[] };
+  return d.items;
+}
+
+export async function getInfluencers(): Promise<{
+  points: InfluencerPoint[];
+  suspicious_count: number;
+}> {
+  const res = await fetch(`${BASE}/api/dashboard/influencers`, { cache: "no-store" });
+  if (!res.ok) throw new Error("获取达人数据失败");
+  return (await res.json()) as { points: InfluencerPoint[]; suspicious_count: number };
+}
+
+// ===================== 秒搭 H5 报告页 =====================
+export interface RadarDim {
+  dimension: string;
+  key: string;
+  value: number;
+}
+
+export interface MiaodaReport {
+  record_id: string;
+  status: "processing" | "done" | "failed";
+  influencer_name: string;
+  platform: string | null;
+  followers: number;
+  target_product: string | null;
+  ai_match_score: number | null;
+  ai_risk_warning: string | null;
+  ai_outreach_script: string | null;
+  fit_analysis: string | null;
+  radar: RadarDim[] | null;
+  multilingual: Record<string, string> | null;
+  ai_report_url: string | null;
+  error: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export async function getMiaodaReport(recordId: string): Promise<MiaodaReport> {
+  const res = await fetch(`${BASE}/api/miaoda/report/${recordId}`, { cache: "no-store" });
+  if (!res.ok) throw new Error("获取达人分析报告失败");
+  return (await res.json()) as MiaodaReport;
+}

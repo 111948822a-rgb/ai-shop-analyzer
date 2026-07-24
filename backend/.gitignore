@@ -1,0 +1,15 @@
+# 密钥与本地数据（绝不进版本库）
+.env
+.env.*
+*.db
+*.sqlite3
+dev.db
+uploads/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+.venv/
+venv/

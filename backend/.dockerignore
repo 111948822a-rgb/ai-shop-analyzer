@@ -1,0 +1,18 @@
+# Docker 构建上下文排除项（避免密钥/本地数据/缓存进入镜像）
+.env
+.env.*
+*.db
+*.sqlite3
+dev.db
+uploads/
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+.git/
+.gitignore
+README.md
+Dockerfile
+.dockerignore
