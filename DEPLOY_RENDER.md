@@ -120,6 +120,24 @@ Render 会按依赖顺序创建并部署：
 > 当前仓库 `render.yaml` 已是正确写法（数据库在 `databases:` 列表、`services` 仅含两个 `web`），无需再改。
 > **重要**：第一次 Blueprint 解析失败后，必须去 Render **删除那个失败的环境**，再重新 **New + → Blueprint** 从 GitHub 拉最新代码。不要直接 Retry / 重试旧的失败部署——它会复用失败时的旧快照，仍报同样的类型错误。
 
+### 0.1 Blueprint 报 `cannot simultaneously specify fields value and sync`
+症状：大量 `services[0].envVars[N] cannot simultaneously specify fields value and sync`。
+根因：同一个环境变量条目里**同时写了 `value: ""` 和 `sync: false`**，Render 不允许二者共存。
+正确写法（源自 Render 官方 Blueprint 规范）：
+- **密钥 / 需要手动填写的变量**：只写 `key` + `sync: false`（不写 `value`），Render 在创建时弹出输入框让你填；例如 `- key: DASHSCOPE_API_KEY` 换行 `  sync: false`
+- **有固定值的变量**：只写 `key` + `value`（不写 `sync`）；例如 `- key: PYTHONPATH` 换行 `  value: /app`
+- 二者**绝不**同时出现。
+
+### 0.2 Blueprint 报 `fromService.property: invalid service property: url` / `fromService.type: empty but required`
+症状：`services[1].envVars[0].fromService.property: invalid service property: url. Valid properties are connectionString, host, hostport, port.` 以及 `fromService.type: empty but required`。
+根因：① `fromService` **必须带 `type` 字段**；② web 服务的 `property` 合法值只有 `host` / `port` / `hostport`（无 `url`），且给的是私有网络主机名，**浏览器访问不到**；③ 本项目前端 `lib/api.ts` 用 `${BASE}/api/...` 直接拼接，要求 `NEXT_PUBLIC_API_URL` 是**带 `https://` 的完整 URL**。
+正确写法：前端直接写完整 URL（Render web 服务固定域名为 `https://<服务名>.onrender.com`）：
+```yaml
+- key: NEXT_PUBLIC_API_URL
+  value: https://ai-shop-analyzer-backend.onrender.com
+```
+> 若以后重命名后端服务，记得同步改这个 URL。需要引用其它服务属性时再用 `fromService`（必须含 `type`，`property` 用 `host`/`port`/`hostport`，或 `envVarKey` 引用其环境变量），但本项目前端场景用完整 URL 最稳妥。
+
 ### 1. 构建失败：`Dockerfile: 2B` 或 `transferring dockerfile` 报错
 症状见你之前遇到的坑。原因几乎都是 `backend/Dockerfile` 被合并冲突标记污染。
 - 确认文件是完整的 6 行（见仓库当前版本）
