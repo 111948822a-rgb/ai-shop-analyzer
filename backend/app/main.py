@@ -1,22 +1,3 @@
-<<<<<<< HEAD
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-
-from app.core.config import settings
-from app.core.database import init_db
-from app.api.miaoda_webhook import router as miaoda_router
-from app.api.reports import router as reports_router
-
-app = FastAPI(
-    title="AI Shop Analyzer API",
-    description="跨境电商店铺数据AI分析、达人评估与避坑预警",
-    version="1.0.0"
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-=======
 """FastAPI 主入口：装配路由、CORS、生命周期，串起各核心模块。
 
 保留 v1 的 upload / analyze / reports 路由，并新增飞书 webhook / 事件订阅 /
@@ -51,37 +32,13 @@ app = FastAPI(title="AI Shop Analyzer API", version="0.2.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
->>>>>>> f44a10f46c4881daf74503e50878a9fa023a8f16
-    allow_credentials=True,
+    # 部署到 Render 后前端域名不固定，放开跨域（如需收紧可改为具体域名列表）
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-<<<<<<< HEAD
-app.include_router(miaoda_router)
-app.include_router(reports_router)
-
-
-@app.on_event("startup")
-def startup_event():
-    init_db()
-
-
-@app.get("/")
-def root():
-    return {"message": "AI Shop Analyzer API is running"}
-
-
-@app.get("/health")
-def health_check():
-    return {"status": "healthy"}
-
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host=settings.HOST, port=settings.PORT)
-=======
 settings = get_settings()
 
 # ---- v1 路由（上传 / 分析 / 报告）----
@@ -101,6 +58,12 @@ def health() -> dict:
     return {"status": "ok"}
 
 
+@app.get("/health")
+def health_check() -> dict:
+    """Render healthCheckPath 指向 /health，保留兼容端点。"""
+    return {"status": "ok"}
+
+
 # ---------------- 飞书 Webhook 推送（供其他服务 / 前端调用）----------------
 @app.post("/api/feishu/push")
 def feishu_push(payload: dict[str, Any] = Body(...)) -> dict:
@@ -114,4 +77,3 @@ def trigger_daily_report() -> dict:
 
     task = daily_report_task.delay()
     return {"task_id": task.id}
->>>>>>> f44a10f46c4881daf74503e50878a9fa023a8f16

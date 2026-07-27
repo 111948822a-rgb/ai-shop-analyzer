@@ -1,26 +1,3 @@
-<<<<<<< HEAD
-import type { Metadata } from 'next'
-import './globals.css'
-
-export const metadata: Metadata = {
-  title: 'AI Shop Analyzer',
-  description: '跨境电商店铺数据分析与达人评估平台',
-}
-
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
-  return (
-    <html lang="zh-CN">
-      <body className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-        {children}
-      </body>
-    </html>
-  )
-}
-=======
 import type { Metadata } from "next";
 import "./globals.css";
 
@@ -38,4 +15,3 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     </html>
   );
 }
->>>>>>> f44a10f46c4881daf74503e50878a9fa023a8f16
