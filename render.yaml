@@ -20,49 +20,37 @@ services:
           name: ai-shop-analyzer-db
           property: connectionString
       - key: REDIS_URL
-        value: ""
         sync: false
       - key: MIAODA_SECRET
-        value: ""
         sync: false
       - key: MIAODA_API_KEY
-        value: ""
         sync: false
       - key: MIAODA_API_URL
-        value: ""
         sync: false
       - key: DASHSCOPE_API_KEY
-        value: ""
         sync: false
       - key: FEISHU_WEBHOOK_URL
-        value: ""
         sync: false
       - key: FEISHU_SECRET
-        value: ""
         sync: false
       - key: TK_PARTNER_APP_KEY
-        value: ""
         sync: false
       - key: TK_PARTNER_APP_SECRET
-        value: ""
         sync: false
       - key: TK_AUTH_SHOP_ID
-        value: ""
         sync: false
       - key: TK_AUTH_ACCESS_TOKEN
-        value: ""
         sync: false
       - key: TK_AUTH_REFRESH_TOKEN
-        value: ""
         sync: false
       - key: REPORTS_BASE_URL
-        value: ""
         sync: false
       - key: PYTHONPATH
         value: /app
     plan: starter
     healthCheckPath: /health
     numInstances: 1
+
   - type: web
     name: ai-shop-analyzer-frontend
     runtime: node
@@ -71,9 +59,7 @@ services:
     rootDir: frontend
     envVars:
       - key: NEXT_PUBLIC_API_URL
-        fromService:
-          name: ai-shop-analyzer-backend
-          property: url
+        value: https://ai-shop-analyzer-backend.onrender.com
     buildCommand: npm install && npm run build
     startCommand: npm run start
     plan: starter
