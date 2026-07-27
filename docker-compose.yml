@@ -1,0 +1,27 @@
+# =========================================================================
+# AI Shop Analyzer —— 仅 Redis 服务
+# 数据库当前用 SQLite（dev.db），无需容器；只需 Redis 来跑 Celery 异步/定时任务。
+# 用法：
+#   docker-compose up -d        # 后台启动 Redis
+#   docker-compose down         # 停止并移除容器
+#   docker-compose ps           # 查看状态
+# =========================================================================
+version: "3.9"
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: ai-shop-redis
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  redisdata:

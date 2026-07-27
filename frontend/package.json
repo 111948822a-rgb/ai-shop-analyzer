@@ -1,10 +1,15 @@
 {
   "name": "ai-shop-analyzer-frontend",
+<<<<<<< HEAD
   "version": "1.0.0",
+=======
+  "version": "0.1.0",
+>>>>>>> f44a10f46c4881daf74503e50878a9fa023a8f16
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+<<<<<<< HEAD
     "start": "next start",
     "lint": "next lint"
   },
@@ -22,15 +27,33 @@
     "tailwind-merge": "^2.5.2",
     "tailwindcss": "^3.4.10",
     "zod": "^3.23.8"
+=======
+    "start": "next start"
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "next": "^14.2.15",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-markdown": "^9.0.1",
+    "recharts": "^2.13.0",
+    "tailwind-merge": "^2.5.4"
+>>>>>>> f44a10f46c4881daf74503e50878a9fa023a8f16
   },
   "devDependencies": {
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "autoprefixer": "^10.4.20",
+<<<<<<< HEAD
     "eslint": "^8",
     "eslint-config-next": "14.2.5",
     "postcss": "^8.4.41",
     "typescript": "^5.4.5"
+=======
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.14",
+    "typescript": "^5"
+>>>>>>> f44a10f46c4881daf74503e50878a9fa023a8f16
   }
 }

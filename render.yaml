@@ -13,7 +13,7 @@ services:
     runtime: docker
     rootDir: backend
     dockerfilePath: Dockerfile
-    repo: https://github.com/your-username/ai-shop-analyzer
+    repo: https://github.com/111948822a-rgb/ai-shop-analyzer
     branch: main
     envVars:
       - key: DATABASE_URL
@@ -68,7 +68,7 @@ services:
   - type: web
     name: ai-shop-analyzer-frontend
     runtime: node
-    repo: https://github.com/your-username/ai-shop-analyzer
+    repo: https://github.com/111948822a-rgb/ai-shop-analyzer
     branch: main
     rootDir: frontend
     envVars:
