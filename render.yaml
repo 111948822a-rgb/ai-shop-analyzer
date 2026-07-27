@@ -1,5 +1,5 @@
 services:
-  - type: psql
+  - type: postgres
     name: ai-shop-analyzer-db
     databaseName: ai_shop_analyzer
     user: ai_shop_analyzer
