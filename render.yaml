@@ -21,7 +21,7 @@ services:
           property: connectionString
       - key: REDIS_URL
         sync: false
-      - key: MIAODA_SECRET
+      - key: MIAODA_WEBHOOK_SECRET
         sync: false
       - key: MIAODA_API_KEY
         sync: false
@@ -31,7 +31,7 @@ services:
         sync: false
       - key: FEISHU_WEBHOOK_URL
         sync: false
-      - key: FEISHU_SECRET
+      - key: FEISHU_WEBHOOK_SECRET
         sync: false
       - key: TK_PARTNER_APP_KEY
         sync: false
@@ -43,7 +43,7 @@ services:
         sync: false
       - key: TK_AUTH_REFRESH_TOKEN
         sync: false
-      - key: REPORTS_BASE_URL
+      - key: FRONTEND_BASE_URL
         sync: false
       - key: PYTHONPATH
         value: /app
