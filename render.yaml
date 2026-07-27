@@ -1,13 +1,12 @@
-services:
-  - type: postgres
-    name: ai-shop-analyzer-db
+databases:
+  - name: ai-shop-analyzer-db
     databaseName: ai_shop_analyzer
     user: ai_shop_analyzer
     ipAllowList:
       - source: "0.0.0.0/0"
         description: "Allow all connections"
-    plan: starter
 
+services:
   - type: web
     name: ai-shop-analyzer-backend
     runtime: docker
@@ -64,7 +63,6 @@ services:
     plan: starter
     healthCheckPath: /health
     numInstances: 1
-
   - type: web
     name: ai-shop-analyzer-frontend
     runtime: node

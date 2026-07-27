@@ -113,12 +113,12 @@ Render 会按依赖顺序创建并部署：
 
 ## 六、常见问题排查
 
-### 0. Blueprint 报 `unknown type "psql"`
-症状：在 Render 选 Blueprint 后立刻报错 `A Blueprint file was found, but there was an issue. unknown type "psql"`。
-原因：`render.yaml` 里数据库服务写成了 `type: psql`，但 Render 的正确类型名是 **`postgres`**（`psql` 是 psql 客户端的名字，不是服务类型）。
-修复：把数据库服务的 `type: psql` 改成 `type: postgres`，提交推送后回到 Render 重新走 Blueprint 流程即可。
-> 当前仓库已修复（commit `147dff4`），无需再改。
-> **重要**：第一次 Blueprint 解析失败后，必须去 Render **删除那个失败的环境**，再重新 **New + → Blueprint** 从 GitHub 拉最新代码。不要直接 Retry / 重试旧的失败部署——它会复用失败时的旧快照，仍然报 `psql`。
+### 0. Blueprint 报 `unknown type "psql"` / `unknown type "postgres"`
+症状：在 Render 选 Blueprint 后报错 `A Blueprint file was found, but there was an issue. unknown type "psql"` 或 `unknown type "postgres"`。
+根因（关键）：Render 的 `services` 列表里**根本没有数据库类型**，`type` 只接受 `web` / `pserv` / `worker` / `cron` / `keyvalue`。PostgreSQL 必须放在**根级 `databases:` 列表**（不用 `type` 字段），绝不能在 `services` 下用 `type: postgres` 或 `type: psql` 去定义。
+正确写法：把数据库从 `services:` 下移到根级 `databases:`，条目只保留 `name` / `databaseName` / `user` / `ipAllowList` 等字段；`web` 服务里继续用 `fromDatabase` 引用它的 `name`。
+> 当前仓库 `render.yaml` 已是正确写法（数据库在 `databases:` 列表、`services` 仅含两个 `web`），无需再改。
+> **重要**：第一次 Blueprint 解析失败后，必须去 Render **删除那个失败的环境**，再重新 **New + → Blueprint** 从 GitHub 拉最新代码。不要直接 Retry / 重试旧的失败部署——它会复用失败时的旧快照，仍报同样的类型错误。
 
 ### 1. 构建失败：`Dockerfile: 2B` 或 `transferring dockerfile` 报错
 症状见你之前遇到的坑。原因几乎都是 `backend/Dockerfile` 被合并冲突标记污染。
