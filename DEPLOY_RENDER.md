@@ -195,6 +195,14 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 - `render.yaml` 用的是 `starter` plan（不休眠，但计费）
 - 想省钱可改成 `free`：编辑 `render.yaml` 把对应 `plan: starter` 改成 `plan: free`，提交后 Render 会更新；免费版 15 分钟无流量会休眠，下次访问需冷启动（约 30 秒）
 
+### 0.5 部署成功，但浏览器打不开 / 显示 404（其实是开错了地址）
+症状：Render 显示部署成功，你打开给的 `*.onrender.com` 链接却空白或 404。
+根因：本项目有**两个 web 服务**——前端（Next.js 网站）和后端（FastAPI 接口）。后端只在 `/health` 和 `/api/*` 有响应，**根路径 `/` 返回 404**（它没有网页）。你多半点开的是后端服务地址，把它当网站了。
+正确地址（以实际 Blueprint 创建的名称为准）：
+- **网站（前端，给人访问）**：`https://ai-shop-analyzer-frontend.onrender.com`
+- 后端 API（只给前端调用，不是网页）：`https://ai-shop-analyzer-backend.onrender.com`（若账号里服务名有 `-N` 后缀冲突，则是对应的后端地址）
+> 若前端页面能打开、但数据加载失败，查前端服务的环境变量 `NEXT_PUBLIC_API_URL` 是否指向正确的后端地址（两者需同账号、网络互通）。
+
 ---
 
 ## 七、更新代码（你已经打通了自动链路）
