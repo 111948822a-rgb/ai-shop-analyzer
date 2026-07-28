@@ -146,11 +146,32 @@ Render 会按依赖顺序创建并部署：
 为不再被历史类型小问题卡住，已在 `next.config.mjs` 加 `typescript: { ignoreBuildErrors: true }` 与 `eslint: { ignoreDuringBuilds: true }` 作为部署安全网（运行时行为不受影响）。
 > 验证方法：本地 `cd frontend && npm install && npm run build`，能跑出 `✓ Compiled successfully` + 4 个页面路由即说明前端构建没问题。
 
-### 1. 构建失败：`Dockerfile: 2B` 或 `transferring dockerfile` 报错
-症状见你之前遇到的坑。原因几乎都是 `backend/Dockerfile` 被合并冲突标记污染。
-- 确认文件是完整的 6 行（见仓库当前版本）
-- 本地用 `head -c 200 backend/Dockerfile` 看字节数，正常应 >150 字节
-- 已修复，正常情况下不会再出现
+### 1. 构建失败：`open Dockerfile: no such file or directory` / `transferring dockerfile: 2B`
+症状：后端 Docker 构建一开始（BuildKit 读 Dockerfile 阶段）就失败，日志出现
+`#1 transferring dockerfile: 2B done` 然后 `error: failed to solve: failed to read dockerfile: open Dockerfile: no such file or directory`。
+
+**真正的根因（已修复）**：Render 的 `dockerfilePath` 是**相对于仓库根目录（repo root）**，而不是相对于 `rootDir`。
+之前的错误写法：
+```yaml
+rootDir: backend
+dockerfilePath: Dockerfile        # ❌ Render 去仓库根目录找 ./Dockerfile → 根目录没有 → open Dockerfile: no such file or directory
+```
+Dockerfile 实际在 `backend/Dockerfile`，所以仓库根目录找不到它，报 `no such file or directory`。
+（`2B` 是 Render 在根目录匹配到某个极小/空占位文件时报告的字节数，属于路径找错后的连带现象。）
+
+**正确写法（当前仓库已采用）**：
+```yaml
+rootDir: backend
+dockerfilePath: backend/Dockerfile   # ✅ 相对仓库根目录，指向真实的 Dockerfile
+dockerContext: backend               # ✅ 构建上下文设为 backend/，保证 Dockerfile 内 COPY . . 与 COPY requirements.txt . 能命中文件
+```
+
+> 关键记忆点：**Docker 服务的 `dockerfilePath` 和 `dockerContext` 都相对仓库根目录**，和 `rootDir` 是两回事。
+> `rootDir` 只决定"哪些文件改动会触发该服务构建"，**不会改变 Render 查找 Dockerfile 的路径**。
+> 推论：若以后把 Dockerfile 挪到 `backend/` 之外的目录，必须同步改 `dockerfilePath` 为相对仓库根目录的新路径。
+
+> 改完 `render.yaml` 并 `git push` 后，Render 会自动重新同步 Blueprint 配置（更新 `Dockerfile Path` 字段）再部署。
+> 若仍报同样的错，去 Render 控制台该后端服务 → **Manual Deploy → Clear build cache & deploy** 强制用新配置重建一次。
 
 ### 2. 后端启动即崩：`ModuleNotFoundError` / `SyntaxError`
 - 之前 15 个文件有合并冲突，现已全部清理。若仍崩，先 `git pull` 确认拉到最新 `main`
