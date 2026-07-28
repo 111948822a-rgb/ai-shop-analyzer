@@ -147,31 +147,28 @@ Render 会按依赖顺序创建并部署：
 > 验证方法：本地 `cd frontend && npm install && npm run build`，能跑出 `✓ Compiled successfully` + 4 个页面路由即说明前端构建没问题。
 
 ### 1. 构建失败：`open Dockerfile: no such file or directory` / `transferring dockerfile: 2B`
-症状：后端 Docker 构建一开始（BuildKit 读 Dockerfile 阶段）就失败，日志出现
-`#1 transferring dockerfile: 2B done` 然后 `error: failed to solve: failed to read dockerfile: open Dockerfile: no such file or directory`。
+症状：后端 Docker 构建一开始就失败，日志：
+`#1 [internal] load build definition from Dockerfile` → `#1 transferring dockerfile: 2B done` → `error: failed to solve: failed to read dockerfile: open Dockerfile: no such file or directory`。
+**关键线索**：日志写的是 `from Dockerfile`（没有子目录），说明 Render 在**仓库根目录**找 `./Dockerfile`，而本项目 Dockerfile 实际在 `backend/Dockerfile`。
 
-**真正的根因（已修复）**：Render 的 `dockerfilePath` 是**相对于仓库根目录（repo root）**，而不是相对于 `rootDir`。
-之前的错误写法：
-```yaml
-rootDir: backend
-dockerfilePath: Dockerfile        # ❌ Render 去仓库根目录找 ./Dockerfile → 根目录没有 → open Dockerfile: no such file or directory
+**根因（两层，已彻底解决）**：
+1. Render 的 `dockerfilePath` 默认是仓库根目录的 `./Dockerfile`。本项目是 monorepo，Dockerfile 在 `backend/` 下，根目录没有 → 找不到。
+2. **更隐蔽的一点**：Render 的 Blueprint 在**创建 Docker 服务时**就锁死了 `Dockerfile Path` 字段，**后续 push 改 `dockerfilePath`/`dockerContext` 不会回写已存在的服务**（只在"删除服务 → 重新 Blueprint"时才会重新读取）。所以只改 `render.yaml` 永远修不好"已存在"的这个服务——这正是之前 `ffb01ae` 提交后依然报同样错的原因。
+
+**正确且已生效的修复（仓库当前采用）**：
+在**仓库根目录**放一份 `Dockerfile`，让 Render 默认找得到它；构建上下文用仓库根目录，内部用 `COPY backend/...` 把后端代码拷进去：
+```dockerfile
+FROM python:3.11-slim
+WORKDIR /app
+COPY backend/requirements.txt .
+RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
+COPY backend/ .
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
-Dockerfile 实际在 `backend/Dockerfile`，所以仓库根目录找不到它，报 `no such file or directory`。
-（`2B` 是 Render 在根目录匹配到某个极小/空占位文件时报告的字节数，属于路径找错后的连带现象。）
+`render.yaml` 后端服务相应写成 `dockerfilePath: Dockerfile`（指向根目录这份），并**去掉 `dockerContext`**（避免强制 backend 上下文把 `COPY backend/...` 变成 `backend/backend/...`）。
+`backend/Dockerfile` 仍保留给本地 `docker build` 使用。
 
-**正确写法（当前仓库已采用）**：
-```yaml
-rootDir: backend
-dockerfilePath: backend/Dockerfile   # ✅ 相对仓库根目录，指向真实的 Dockerfile
-dockerContext: backend               # ✅ 构建上下文设为 backend/，保证 Dockerfile 内 COPY . . 与 COPY requirements.txt . 能命中文件
-```
-
-> 关键记忆点：**Docker 服务的 `dockerfilePath` 和 `dockerContext` 都相对仓库根目录**，和 `rootDir` 是两回事。
-> `rootDir` 只决定"哪些文件改动会触发该服务构建"，**不会改变 Render 查找 Dockerfile 的路径**。
-> 推论：若以后把 Dockerfile 挪到 `backend/` 之外的目录，必须同步改 `dockerfilePath` 为相对仓库根目录的新路径。
-
-> 改完 `render.yaml` 并 `git push` 后，Render 会自动重新同步 Blueprint 配置（更新 `Dockerfile Path` 字段）再部署。
-> 若仍报同样的错，去 Render 控制台该后端服务 → **Manual Deploy → Clear build cache & deploy** 强制用新配置重建一次。
+> 关键记忆点：① Render 默认在仓库根找 `./Dockerfile`；② **已创建的 Docker 服务不会因 push 改 render.yaml 而更新 Dockerfile Path**，要么删服务重建，要么直接在根目录放 Dockerfile 让它默认命中。本项目选了后者（最稳，不依赖 Render 的 sync 行为）。
 
 ### 2. 后端启动即崩：`ModuleNotFoundError` / `SyntaxError`
 - 之前 15 个文件有合并冲突，现已全部清理。若仍崩，先 `git pull` 确认拉到最新 `main`

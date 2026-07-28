@@ -11,8 +11,7 @@ services:
     name: ai-shop-analyzer-backend
     runtime: docker
     rootDir: backend
-    dockerfilePath: backend/Dockerfile
-    dockerContext: backend
+    dockerfilePath: Dockerfile
     repo: https://github.com/111948822a-rgb/ai-shop-analyzer
     branch: main
     envVars:

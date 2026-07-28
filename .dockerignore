@@ -1,0 +1,13 @@
+# 仓库根 Dockerfile 的构建上下文是仓库根目录，这里只排除不需要进后端镜像的内容
+frontend
+.git
+*.md
+docker-compose.yml
+start_dev.py
+backend/data
+backend/.env
+backend/scripts
+backend/smoke_test.py
+**/__pycache__
+**/*.pyc
+**/*.pyo
