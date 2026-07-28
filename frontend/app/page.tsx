@@ -55,14 +55,23 @@ export default function Home() {
               placeholder="输入任务ID或达人ID..."
               className="flex-1 px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-lg focus:outline-none focus:border-primary-500 transition-colors"
             />
-            <Link
-              href={`/report/${taskId}`}
-              className="btn-primary flex items-center justify-center gap-2"
-              disabled={!taskId}
-            >
-              查看报告
-              <ArrowRight className="w-4 h-4" />
-            </Link>
+            {taskId ? (
+              <Link
+                href={`/report/${taskId}`}
+                className="btn-primary flex items-center justify-center gap-2"
+              >
+                查看报告
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+            ) : (
+              <span
+                className="btn-primary flex items-center justify-center gap-2 opacity-50 cursor-not-allowed"
+                aria-disabled="true"
+              >
+                查看报告
+                <ArrowRight className="w-4 h-4" />
+              </span>
+            )}
           </div>
 
           <div className="mt-6">

@@ -36,6 +36,18 @@ class Settings(BaseSettings):
     # True：改走 Celery（需 Redis + worker）。两者最终都调用 run_influencer_analysis。
     miaoda_use_celery: bool = False
 
+    # TikTok 全球店铺 Partner API（开放平台授权调用）
+    tk_partner_app_key: str = ""
+    tk_partner_app_secret: str = ""
+    tk_auth_shop_id: str = ""
+    tk_auth_access_token: str = ""
+    tk_auth_refresh_token: str = ""
+    tk_token_expires_at: str = ""
+
+    # 飞书秒搭底层 OpenAPI（达人数据拉取）
+    miaoda_api_key: str = ""
+    miaoda_api_url: str = ""
+
     # 秒搭底层飞书多维表格（达人管理表）：app_token + 数据表 table_id
     miaoda_bitable_app_token: str = ""
     miaoda_bitable_table_id: str = ""
