@@ -79,6 +79,7 @@ def fetch_influencers_from_miaoda(
     page = 1
     page_size = 100
     retry_count = 0
+    last_error = None
 
     while True:
         if retry_count >= max_retries:
@@ -111,6 +112,7 @@ def fetch_influencers_from_miaoda(
             content = response.text
 
             if _is_html_response(content):
+                last_error = f"秒搭返回 HTML 而非 JSON（多为未授权或路径错误）: {content[:200]}"
                 logger.error(f"API returned HTML response instead of JSON. URL: {url}")
                 logger.error(f"HTML content preview: {content[:500]}")
                 retry_count += 1
@@ -122,6 +124,7 @@ def fetch_influencers_from_miaoda(
             try:
                 data = response.json()
             except ValueError as e:
+                last_error = f"秒搭返回非 JSON: {content[:200]}"
                 logger.error(f"Failed to parse JSON response: {e}")
                 logger.error(f"Raw response: {content[:500]}")
                 retry_count += 1
@@ -147,6 +150,7 @@ def fetch_influencers_from_miaoda(
             page += 1
 
         except requests.exceptions.RequestException as e:
+            last_error = f"请求秒搭失败: {e}"
             logger.error(f"Failed to fetch page {page}: {e}")
             retry_count += 1
             if retry_count < max_retries:
@@ -155,6 +159,9 @@ def fetch_influencers_from_miaoda(
                 continue
             break
 
+    if not all_influencers and last_error:
+        # 拉取失败（非「无数据」），抛出以便上层向前端暴露真实原因
+        raise RuntimeError(last_error)
     return all_influencers
 
 
