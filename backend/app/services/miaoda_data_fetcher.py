@@ -4,7 +4,7 @@ from typing import List, Dict, Any, Optional
 
 import requests
 
-from app.core.config import settings
+from app.core.config import get_settings
 from app.core.database import SessionLocal
 from app.models.standard import StandardInfluencer
 
@@ -38,6 +38,7 @@ def _is_html_response(content: str) -> bool:
 
 
 def fetch_influencers_from_miaoda(site_id: Optional[str] = None, max_retries: int = 3) -> List[Dict[str, Any]]:
+    settings = get_settings()
     if not settings.MIAODA_API_KEY or not settings.MIAODA_API_URL:
         logger.error("MIAODA_API_KEY or MIAODA_API_URL is not configured")
         return []

@@ -13,7 +13,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import Integer, func, select
+from sqlalchemy import Integer, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
@@ -36,8 +36,33 @@ def _window(days: int) -> tuple[datetime, datetime, datetime, datetime]:
     return start, end_exclusive, prev_start, prev_end_exclusive
 
 
-def _period_agg(db: Session, start: datetime, end_exclusive: datetime) -> dict:
+def _shop_filter_conditions(shop_ids: list[str] | None) -> list:
+    """把前端传来的店铺ID列表转成 SQLAlchemy 过滤条件。
+
+    - 空列表/None：不加过滤（看全部店铺）
+    - 含空串 ""：代表「默认店铺」(shop_id IS NULL)
+    - 其余：shop_id IN (...)
+    """
+    if not shop_ids:
+        return []
+    non_empty = [s for s in shop_ids if s not in ("", None)]
+    conds = []
+    if "" in shop_ids:
+        conds.append(StandardOrder.shop_id.is_(None))
+    if non_empty:
+        conds.append(StandardOrder.shop_id.in_(non_empty))
+    if not conds:
+        return []
+    return [or_(*conds)]
+
+
+def _period_agg(
+    db: Session, start: datetime, end_exclusive: datetime, shop_conds: list | None = None
+) -> dict:
     """数据库层聚合一个时间窗口的 GMV / 订单数 / 客单价 / 退款率。"""
+    where_clauses = [StandardOrder.paid_at >= start, StandardOrder.paid_at < end_exclusive]
+    if shop_conds:
+        where_clauses.extend(shop_conds)
     stmt = select(
         func.coalesce(func.sum(StandardOrder.gmv), 0.0).label("gmv"),
         func.count(StandardOrder.id).label("orders"),
@@ -47,7 +72,7 @@ def _period_agg(db: Session, start: datetime, end_exclusive: datetime) -> dict:
             ),
             0,
         ).label("refunds"),
-    ).where(StandardOrder.paid_at >= start, StandardOrder.paid_at < end_exclusive)
+    ).where(*where_clauses)
     row = db.execute(stmt).one()
     gmv = float(row.gmv)
     orders = int(row.orders)
@@ -70,11 +95,13 @@ def _delta_pct(cur: float, prev: float) -> float | None:
 @router.get("/overview")
 def dashboard_overview(
     days: int = Query(30, ge=1, le=365),
+    shop_ids: str | None = Query(None, alias="shop_ids", description="逗号分隔的店铺ID，空串代表默认店铺"),
     db: Session = Depends(get_db),
 ) -> dict:
+    shop_conds = _shop_filter_conditions(shop_ids.split(",") if shop_ids else None)
     start, end_ex, prev_start, prev_end_ex = _window(days)
-    cur = _period_agg(db, start, end_ex)
-    prev = _period_agg(db, prev_start, prev_end_ex)
+    cur = _period_agg(db, start, end_ex, shop_conds)
+    prev = _period_agg(db, prev_start, prev_end_ex, shop_conds)
 
     def kpi(label: str, key: str, higher_is_better: bool, fmt: str) -> dict:
         return {
@@ -109,15 +136,20 @@ def dashboard_overview(
 @router.get("/gmv-trend")
 def gmv_trend(
     days: int = Query(30, ge=1, le=365),
+    shop_ids: str | None = Query(None, alias="shop_ids", description="逗号分隔的店铺ID"),
     db: Session = Depends(get_db),
 ) -> dict:
+    shop_conds = _shop_filter_conditions(shop_ids.split(",") if shop_ids else None)
     start, end_ex, _, _ = _window(days)
+    where_clauses = [StandardOrder.paid_at >= start, StandardOrder.paid_at < end_ex]
+    if shop_conds:
+        where_clauses.extend(shop_conds)
     stmt = (
         select(
             func.date(StandardOrder.paid_at).label("day"),
             func.coalesce(func.sum(StandardOrder.gmv), 0.0).label("gmv"),
         )
-        .where(StandardOrder.paid_at >= start, StandardOrder.paid_at < end_ex)
+        .where(*where_clauses)
         .group_by(func.date(StandardOrder.paid_at))
         .order_by("day")
     )
@@ -141,16 +173,21 @@ def gmv_trend(
 def top_products(
     days: int = Query(30, ge=1, le=365),
     limit: int = Query(10, ge=1, le=50),
+    shop_ids: str | None = Query(None, alias="shop_ids", description="逗号分隔的店铺ID"),
     db: Session = Depends(get_db),
 ) -> dict:
+    shop_conds = _shop_filter_conditions(shop_ids.split(",") if shop_ids else None)
     start, end_ex, _, _ = _window(days)
+    where_clauses = [StandardOrder.paid_at >= start, StandardOrder.paid_at < end_ex]
+    if shop_conds:
+        where_clauses.extend(shop_conds)
     stmt = (
         select(
             StandardOrder.product_name.label("product"),
             func.coalesce(func.sum(StandardOrder.gmv), 0.0).label("gmv"),
             func.count(StandardOrder.id).label("orders"),
         )
-        .where(StandardOrder.paid_at >= start, StandardOrder.paid_at < end_ex)
+        .where(*where_clauses)
         .group_by(StandardOrder.product_name)
         .order_by(func.sum(StandardOrder.gmv).desc())
         .limit(limit)
@@ -187,3 +224,33 @@ def influencers_scatter(db: Session = Depends(get_db)) -> dict:
         for r in rows
     ]
     return {"points": points, "suspicious_count": sum(1 for p in points if p["is_suspicious"])}
+
+
+# ----------------------------- 端点 5：店铺列表（供前端多选）-----------------------------
+@router.get("/shops")
+def list_shops(db: Session = Depends(get_db)) -> dict:
+    """返回去重后的店铺列表及各自订单数 / GMV，供首页「销售数据分析」先选店铺。
+
+    shop_id 为 NULL 的订单统一归入「默认店铺」(shop_id="")。
+    """
+    rows = db.execute(
+        select(
+            StandardOrder.shop_id,
+            func.count(StandardOrder.id).label("orders"),
+            func.coalesce(func.sum(StandardOrder.gmv), 0.0).label("gmv"),
+        ).group_by(StandardOrder.shop_id)
+    ).all()
+    shops = []
+    for r in rows:
+        sid = r.shop_id or ""
+        shops.append(
+            {
+                "shop_id": sid,
+                "name": r.shop_id or "默认店铺",
+                "order_count": int(r.orders),
+                "gmv": round(float(r.gmv), 2),
+            }
+        )
+    if not shops:
+        shops.append({"shop_id": "", "name": "默认店铺", "order_count": 0, "gmv": 0.0})
+    return {"shops": shops}

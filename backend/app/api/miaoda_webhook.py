@@ -14,12 +14,15 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Body, Header, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Body, Header, HTTPException, Query
 
 from app.core.config import get_settings
-from app.services import miaoda_analysis
+from app.db import SessionLocal
+from app.models.standard import StandardInfluencer
+from app.services import miaoda_analysis, miaoda_data_fetcher
 
 logger = logging.getLogger("miaoda_webhook")
 
@@ -156,3 +159,96 @@ def get_report(record_id: str) -> dict:
             "created_at": row.created_at.isoformat() if row.created_at else None,
             "updated_at": row.updated_at.isoformat() if row.updated_at else None,
         }
+
+
+def _local_influencers() -> list[dict]:
+    """本地达人库兜底：当秒搭未配置/拉取为空时返回。"""
+    with SessionLocal() as db:
+        rows = db.query(StandardInfluencer).all()
+        return [
+            {
+                "influencer_id": r.creator_id,
+                "name": r.name,
+                "platform": r.platform.value if hasattr(r.platform, "value") else r.platform,
+                "followers": r.followers,
+                "engagement_rate": r.engagement_rate,
+                "conversion_rate": r.conversion_rate,
+                "roi": r.roi,
+                "is_suspicious": r.is_suspicious,
+                "niche": r.category,
+            }
+            for r in rows
+        ]
+
+
+@router.get("/influencers")
+def list_miaoda_influencers(
+    site_id: str | None = Query(None, description="可选站点过滤：US / TH / MY"),
+) -> dict:
+    """拉取秒搭达人数据供前端「达人评估」页展示。
+
+    优先从秒搭 OpenAPI 拉取；若未配置密钥或拉取失败/为空，自动回退到本地库，
+    返回统一结构，前端无需关心数据来源。
+    """
+    items: list[dict] = []
+    source = "local"
+    try:
+        raw = miaoda_data_fetcher.fetch_influencers_from_miaoda(site_id)
+        if raw:
+            source = "miaoda"
+            for r in raw:
+                m = miaoda_data_fetcher.map_influencer_data(r)
+                items.append(
+                    {
+                        "influencer_id": m["influencer_id"] or m["influencer_name"],
+                        "name": m["influencer_name"],
+                        "platform": m["platform"],
+                        "followers": m["follower_count"],
+                        "engagement_rate": m["engagement_rate"],
+                        "conversion_rate": m["conversion_rate"],
+                        "roi": m["roi"],
+                        "is_suspicious": m["is_suspicious"],
+                        "niche": m["niche"],
+                    }
+                )
+    except Exception as e:  # noqa: BLE001
+        logger.warning("秒搭达人拉取失败，回退本地库: %s", e)
+
+    if not items:
+        source = "local"
+        items = _local_influencers()
+
+    return {"source": source, "items": items}
+
+
+@router.post("/evaluate")
+def evaluate_influencer(
+    background_tasks: BackgroundTasks,
+    payload: dict[str, Any] = Body(...),
+) -> dict:
+    """基于秒搭（或所选）达人数据，触发 AI 评估，立即返回报告页 URL。
+
+    前端达人评估页点击「评估」时调用：传入达人基本信息，后端生成 record_id、
+    同步落 processing 记录、后台派发 AI 分析，立刻返回 report_url 供前端跳转。
+    """
+    name = payload.get("influencer_name") or payload.get("name")
+    if not name:
+        raise HTTPException(status_code=422, detail="缺少必要字段：influencer_name(或 name)")
+
+    inf_id = payload.get("influencer_id") or name
+    record_id = f"EVAL_{inf_id}_{int(time.time() * 1000)}"
+    mapped = {
+        "record_id": record_id,
+        "influencer_name": name,
+        "platform": payload.get("platform"),
+        "followers": int(payload.get("followers") or 0),
+        "target_product": payload.get("target_product") or "",
+    }
+
+    # 同步建 processing 记录（保证报告页轮询不会 404），再后台跑分析
+    miaoda_analysis.ensure_processing(mapped)
+    channel = _dispatch(mapped, background_tasks)
+
+    report_url = f"{get_settings().frontend_base_url}/report/influencer/{record_id}"
+    logger.info("前端触发达人评估 record_id=%s 渠道=%s", record_id, channel)
+    return {"success": True, "record_id": record_id, "report_url": report_url}

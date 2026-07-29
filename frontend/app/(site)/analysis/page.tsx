@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   getDashboardOverview,
   getGmvTrend,
@@ -16,7 +17,15 @@ import { GmvTrendChart } from "@/components/dashboard/GmvTrendChart";
 import { TopProductsChart } from "@/components/dashboard/TopProductsChart";
 import { InfluencerScatter } from "@/components/dashboard/InfluencerScatter";
 
-export default function DashboardPage() {
+function DashboardInner() {
+  const searchParams = useSearchParams();
+  const shopIds = useMemo(() => {
+    const raw = searchParams.get("shops");
+    if (!raw) return undefined;
+    const arr = raw.split(",").filter(Boolean);
+    return arr.length ? arr : undefined;
+  }, [searchParams]);
+
   const [days, setDays] = useState(30);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -34,9 +43,9 @@ export default function DashboardPage() {
     setError(null);
     try {
       const [o, g, t, inf] = await Promise.all([
-        getDashboardOverview(days),
-        getGmvTrend(days),
-        getTopProducts(10, days),
+        getDashboardOverview(days, shopIds),
+        getGmvTrend(days, shopIds),
+        getTopProducts(10, days, shopIds),
         getInfluencers(),
       ]);
       setOverview(o);
@@ -48,7 +57,7 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [days]);
+  }, [days, shopIds]);
 
   useEffect(() => {
     load();
@@ -59,8 +68,9 @@ export default function DashboardPage() {
       <header className="border-b border-gray-200 bg-white">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
           <div>
-            <h1 className="text-xl font-bold text-gray-900">AI Shop Analyzer · 数据看板</h1>
+            <h1 className="text-xl font-bold text-gray-900">AI Shop Analyzer · 销售数据分析</h1>
             <p className="text-sm text-gray-500">
+              {shopIds ? `已选店铺：${shopIds.join("、")} · ` : "全部店铺 · "}
               {overview
                 ? `统计区间：${overview.period.start} ~ ${overview.period.end}（近 ${overview.period.days} 天）`
                 : "加载中…"}
@@ -121,5 +131,13 @@ export default function DashboardPage() {
         )}
       </div>
     </main>
+  );
+}
+
+export default function AnalysisPage() {
+  return (
+    <Suspense fallback={<div className="p-10 text-center text-gray-400">加载中…</div>}>
+      <DashboardInner />
+    </Suspense>
   );
 }

@@ -85,6 +85,21 @@ export function uploadFile(
   });
 }
 
+// ===================== 店铺（销售数据分析前置选择）=====================
+export interface Shop {
+  shop_id: string;
+  name: string;
+  order_count: number;
+  gmv: number;
+}
+
+export async function getShops(): Promise<Shop[]> {
+  const res = await fetch(`${BASE}/api/dashboard/shops`, { cache: "no-store" });
+  if (!res.ok) throw new Error("获取店铺列表失败");
+  const d = (await res.json()) as { shops: Shop[] };
+  return d.shops;
+}
+
 // ===================== Dashboard 看板 =====================
 export interface Kpi {
   key: string;
@@ -124,21 +139,36 @@ export interface InfluencerPoint {
   is_suspicious: boolean;
 }
 
-export async function getDashboardOverview(days = 30): Promise<DashboardOverview> {
-  const res = await fetch(`${BASE}/api/dashboard/overview?days=${days}`, { cache: "no-store" });
+export async function getDashboardOverview(
+  days = 30,
+  shopIds?: string[]
+): Promise<DashboardOverview> {
+  const qs =
+    shopIds && shopIds.length
+      ? `&shop_ids=${encodeURIComponent(shopIds.join(","))}`
+      : "";
+  const res = await fetch(`${BASE}/api/dashboard/overview?days=${days}${qs}`, { cache: "no-store" });
   if (!res.ok) throw new Error("获取 KPI 失败");
   return (await res.json()) as DashboardOverview;
 }
 
-export async function getGmvTrend(days = 30): Promise<GmvPoint[]> {
-  const res = await fetch(`${BASE}/api/dashboard/gmv-trend?days=${days}`, { cache: "no-store" });
+export async function getGmvTrend(days = 30, shopIds?: string[]): Promise<GmvPoint[]> {
+  const qs =
+    shopIds && shopIds.length
+      ? `&shop_ids=${encodeURIComponent(shopIds.join(","))}`
+      : "";
+  const res = await fetch(`${BASE}/api/dashboard/gmv-trend?days=${days}${qs}`, { cache: "no-store" });
   if (!res.ok) throw new Error("获取 GMV 趋势失败");
   const d = (await res.json()) as { series: GmvPoint[] };
   return d.series;
 }
 
-export async function getTopProducts(limit = 10, days = 30): Promise<TopProduct[]> {
-  const res = await fetch(`${BASE}/api/dashboard/top-products?limit=${limit}&days=${days}`, {
+export async function getTopProducts(limit = 10, days = 30, shopIds?: string[]): Promise<TopProduct[]> {
+  const qs =
+    shopIds && shopIds.length
+      ? `&shop_ids=${encodeURIComponent(shopIds.join(","))}`
+      : "";
+  const res = await fetch(`${BASE}/api/dashboard/top-products?limit=${limit}&days=${days}${qs}`, {
     cache: "no-store",
   });
   if (!res.ok) throw new Error("获取 Top 商品失败");
@@ -185,4 +215,44 @@ export async function getMiaodaReport(recordId: string): Promise<MiaodaReport> {
   const res = await fetch(`${BASE}/api/miaoda/report/${recordId}`, { cache: "no-store" });
   if (!res.ok) throw new Error("获取达人分析报告失败");
   return (await res.json()) as MiaodaReport;
+}
+
+// ===================== 达人评估（秒搭数据）=====================
+export interface MiaodaInfluencer {
+  influencer_id: string;
+  name: string;
+  platform: string;
+  followers: number;
+  engagement_rate: number | null;
+  conversion_rate: number | null;
+  roi: number | null;
+  is_suspicious: boolean;
+  niche: string | null;
+}
+
+export async function getMiaodaInfluencers(
+  siteId?: string
+): Promise<{ source: string; items: MiaodaInfluencer[] }> {
+  const url = siteId
+    ? `${BASE}/api/miaoda/influencers?site_id=${encodeURIComponent(siteId)}`
+    : `${BASE}/api/miaoda/influencers`;
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) throw new Error("获取达人数据失败");
+  return (await res.json()) as { source: string; items: MiaodaInfluencer[] };
+}
+
+export async function evaluateInfluencer(payload: {
+  influencer_id?: string;
+  influencer_name: string;
+  platform?: string;
+  followers?: number;
+  target_product?: string;
+}): Promise<{ success: boolean; record_id: string; report_url: string }> {
+  const res = await fetch(`${BASE}/api/miaoda/evaluate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error((await res.json()).detail ?? "触发评估失败");
+  return (await res.json()) as { success: boolean; record_id: string; report_url: string };
 }
