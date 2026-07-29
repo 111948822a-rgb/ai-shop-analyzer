@@ -88,14 +88,15 @@ def fetch_influencers_from_miaoda(
             break
 
         try:
-            # 秒搭契约：MIAODA_API_URL 本身即完整地址 https://<域名>/openapi/influencers
-            # 兼容用户误填（重复协议头 https://https://、首尾多余斜杠/空格等），统一规整为单个 https://
+            # MIAODA_API_URL 本身即完整地址 https://<域名>/openapi/influencers
+            # 兼容用户误填和重复协议头 https://https://、首尾多余斜杠/空格等，统一规整为单个 https://
             raw = (settings.MIAODA_API_URL or "").strip()
             clean = re.sub(r"https?://", "", raw)        # 去掉所有重复的 http(s):// 协议头
             clean = re.sub(r"^/+", "", clean).rstrip("/")  # 去掉开头多余斜杠并去尾斜杠
             base = f"https://{clean}"
             url = base if base.endswith("/openapi/influencers") else f"{base}/openapi/influencers"
-            headers = {"X-API-Key": settings.MIAODA_API_KEY}
+            # 秒搭网关实测只认 Authorization: Bearer（契约文档写的 X-API-Key 会导致 403 "missing or invalid Authorization header"）
+            headers = {"Authorization": f"Bearer {settings.MIAODA_API_KEY}"}
             params = {"page": page, "pageSize": page_size}
 
             if site_id:

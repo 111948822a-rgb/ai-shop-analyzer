@@ -279,6 +279,7 @@ export interface MiaodaSummary {
 export interface MiaodaDashboard {
   configured: boolean;
   source: string;
+  error: string | null;
   summary: MiaodaSummary;
   items: MiaodaInfluencer[];
 }

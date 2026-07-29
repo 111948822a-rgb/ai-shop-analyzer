@@ -80,7 +80,7 @@ export default function InfluencersDashboardPage() {
   if (error) return <p className="text-red-600">{error}</p>;
   if (!data) return null;
 
-  const { summary, items, configured, source } = data;
+  const { summary, items, configured, source, error: miaodaError } = data;
   const suspiciousRate =
     summary.total > 0
       ? ((summary.suspicious_count / summary.total) * 100).toFixed(1)
@@ -107,10 +107,21 @@ export default function InfluencersDashboardPage() {
 
       {!configured && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-          <strong>提示：</strong> 尚未在后端配置 <code>MIAODA_API_URL</code> 与{" "}
-          <code>MIAODA_API_KEY</code>，因此目前看不到秒搭实时达人数据。请在 Render 后端环境变量中填好这两项，并在秒搭端提供{" "}
-          <code>GET {"{MIAODA_API_URL}"}/openapi/influencers</code> 接口（返回{" "}
-          <code>{"{ items: [...], total: N }"}</code>，请求头带 <code>X-API-Key</code>），重新部署后即可在此看到真实看板。
+          <strong>提示：</strong> 后端尚未配置 <code>MIAODA_API_URL</code> 与{" "}
+          <code>MIAODA_API_KEY</code>，因此目前看不到秒搭实时达人数据。请在 Render 后端环境变量中填好这两项（
+          <code>MIAODA_API_URL</code> 填完整地址，例如{" "}
+          <code>https://&lt;域名&gt;/app/&lt;appId&gt;/openapi/influencers</code>
+          ），并在秒搭后台确认该 OpenAPI 已发布、所用 Key 已授权，重新部署后即可在此看到真实看板。
+        </div>
+      )}
+
+      {configured && source !== "miaoda" && miaodaError && (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <strong>秒搭数据拉取失败：</strong> 后端已配置数据源，但秒搭拒绝了请求。真实原因：
+          <div className="mt-1 font-mono text-xs break-all">{miaodaError}</div>
+          <div className="mt-2">
+            通常是以下原因之一：① 秒搭 API Key 无效 / 未授权 / 与 appId 不匹配；② 该 OpenAPI 接口未发布。请到秒搭后台核对 Key 与接口权限。
+          </div>
         </div>
       )}
 
