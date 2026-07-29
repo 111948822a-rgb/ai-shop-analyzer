@@ -1,4 +1,5 @@
 import logging
+import re
 import time
 from typing import List, Dict, Any, Optional
 
@@ -88,8 +89,11 @@ def fetch_influencers_from_miaoda(
 
         try:
             # 秒搭契约：MIAODA_API_URL 本身即完整地址 https://<域名>/openapi/influencers
-            # 这里兼容「只填域名」的写法，避免重复拼接路径。
-            base = settings.MIAODA_API_URL.rstrip("/")
+            # 兼容用户误填（重复协议头 https://https://、首尾多余斜杠/空格等），统一规整为单个 https://
+            raw = (settings.MIAODA_API_URL or "").strip()
+            clean = re.sub(r"https?://", "", raw)        # 去掉所有重复的 http(s):// 协议头
+            clean = re.sub(r"^/+", "", clean).rstrip("/")  # 去掉开头多余斜杠并去尾斜杠
+            base = f"https://{clean}"
             url = base if base.endswith("/openapi/influencers") else f"{base}/openapi/influencers"
             headers = {"X-API-Key": settings.MIAODA_API_KEY}
             params = {"page": page, "pageSize": page_size}
