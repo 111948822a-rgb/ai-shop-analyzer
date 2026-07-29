@@ -37,7 +37,39 @@ def _is_html_response(content: str) -> bool:
            lower_content.startswith("<body")
 
 
-def fetch_influencers_from_miaoda(site_id: Optional[str] = None, max_retries: int = 3) -> List[Dict[str, Any]]:
+def _to_number(val: Any, cast: type = int) -> Any:
+    """将秒搭可能返回的字符串数字（含 1,200 / 12.3k / 3.4m / 末尾 %）安全转为数字。
+
+    无法解析时返回 0，绝不抛异常，保证整条数据管道不中断。
+    """
+    if val is None or val == "":
+        return 0
+    mult = 1
+    if isinstance(val, str):
+        s = val.strip().replace(",", "").replace("%", "")
+        low = s.lower()
+        if low.endswith("k"):
+            s, mult = s[:-1], 1_000
+        elif low.endswith("m"):
+            s, mult = s[:-1], 1_000_000
+        try:
+            return cast(float(s) * mult)
+        except ValueError:
+            return 0
+    try:
+        return cast(float(val) * mult)
+    except (ValueError, TypeError):
+        return 0
+
+
+def fetch_influencers_from_miaoda(
+    site_id: Optional[str] = None,
+    platform_id: Optional[str] = None,
+    status: Optional[str] = None,
+    keyword: Optional[str] = None,
+    category: Optional[str] = None,
+    max_retries: int = 3,
+) -> List[Dict[str, Any]]:
     settings = get_settings()
     if not settings.MIAODA_API_KEY or not settings.MIAODA_API_URL:
         logger.error("MIAODA_API_KEY or MIAODA_API_URL is not configured")
@@ -54,12 +86,23 @@ def fetch_influencers_from_miaoda(site_id: Optional[str] = None, max_retries: in
             break
 
         try:
-            url = f"{settings.MIAODA_API_URL}/openapi/influencers"
+            # 秒搭契约：MIAODA_API_URL 本身即完整地址 https://<域名>/openapi/influencers
+            # 这里兼容「只填域名」的写法，避免重复拼接路径。
+            base = settings.MIAODA_API_URL.rstrip("/")
+            url = base if base.endswith("/openapi/influencers") else f"{base}/openapi/influencers"
             headers = {"X-API-Key": settings.MIAODA_API_KEY}
             params = {"page": page, "pageSize": page_size}
 
             if site_id:
                 params["siteId"] = site_id
+            if platform_id:
+                params["platformId"] = platform_id
+            if status:
+                params["status"] = status
+            if keyword:
+                params["keyword"] = keyword
+            if category:
+                params["category"] = category
 
             logger.info(f"Fetching page {page} from Miaoda API...")
             response = requests.get(url, headers=headers, params=params, timeout=30)
@@ -122,19 +165,19 @@ def map_influencer_data(raw_data: Dict[str, Any]) -> Dict[str, Any]:
         "platform": raw_data.get("platform") or raw_data.get("channel") or "TikTok",
         "influencer_name": raw_data.get("name") or raw_data.get("username") or raw_data.get("nickname") or "Unknown",
         "avatar_url": raw_data.get("avatar") or raw_data.get("avatar_url") or raw_data.get("profile_picture") or "",
-        "follower_count": int(raw_data.get("followers") or raw_data.get("follower_count") or raw_data.get("fans") or 0),
-        "engagement_rate": float(raw_data.get("engagement_rate") or raw_data.get("engagement") or 0),
-        "conversion_rate": float(raw_data.get("conversion_rate") or raw_data.get("conversion") or 0),
-        "roi": float(raw_data.get("roi") or raw_data.get("return_on_investment") or 0),
+        "follower_count": _to_number(raw_data.get("followers") or raw_data.get("follower_count") or raw_data.get("fans")),
+        "engagement_rate": _to_number(raw_data.get("engagement_rate") or raw_data.get("engagement")),
+        "conversion_rate": _to_number(raw_data.get("conversion_rate") or raw_data.get("conversion")),
+        "roi": _to_number(raw_data.get("roi") or raw_data.get("return_on_investment")),
         "is_suspicious": bool(raw_data.get("is_suspicious") or raw_data.get("suspicious") or False),
         "suspicious_reason": raw_data.get("suspicious_reason") or raw_data.get("risk_reason") or "",
         "country": raw_data.get("country") or raw_data.get("region") or "",
         "language": LANGUAGE_MAP.get(raw_data.get("language") or raw_data.get("lang"), "en"),
         "niche": raw_data.get("niche") or raw_data.get("category") or raw_data.get("vertical") or "General",
-        "total_posts": int(raw_data.get("total_posts") or raw_data.get("posts") or raw_data.get("content_count") or 0),
-        "avg_likes": int(raw_data.get("avg_likes") or raw_data.get("average_likes") or raw_data.get("likes") or 0),
-        "avg_comments": int(raw_data.get("avg_comments") or raw_data.get("average_comments") or raw_data.get("comments") or 0),
-        "avg_shares": int(raw_data.get("avg_shares") or raw_data.get("average_shares") or raw_data.get("shares") or 0),
+        "total_posts": _to_number(raw_data.get("total_posts") or raw_data.get("posts") or raw_data.get("content_count")),
+        "avg_likes": _to_number(raw_data.get("avg_likes") or raw_data.get("average_likes") or raw_data.get("likes")),
+        "avg_comments": _to_number(raw_data.get("avg_comments") or raw_data.get("average_comments") or raw_data.get("comments")),
+        "avg_shares": _to_number(raw_data.get("avg_shares") or raw_data.get("average_shares") or raw_data.get("shares")),
     }
 
 
