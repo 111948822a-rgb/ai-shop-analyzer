@@ -256,3 +256,40 @@ export async function evaluateInfluencer(payload: {
   if (!res.ok) throw new Error((await res.json()).detail ?? "触发评估失败");
   return (await res.json()) as { success: boolean; record_id: string; report_url: string };
 }
+
+// ===================== 达人数据看板（秒搭）=====================
+export interface MiaodaSummary {
+  total: number;
+  total_followers: number;
+  avg_roi: number;
+  suspicious_count: number;
+  platform_distribution: { platform: string; count: number }[];
+  top_by_followers: { name: string; platform: string | null; followers: number | null }[];
+  roi_buckets: { range: string; count: number }[];
+  scatter: {
+    name: string;
+    followers: number | null;
+    engagement_rate: number | null;
+    conversion_rate: number | null;
+    roi: number | null;
+    is_suspicious: boolean;
+  }[];
+}
+
+export interface MiaodaDashboard {
+  configured: boolean;
+  source: string;
+  summary: MiaodaSummary;
+  items: MiaodaInfluencer[];
+}
+
+export async function getMiaodaDashboard(
+  siteId?: string
+): Promise<MiaodaDashboard> {
+  const url = siteId
+    ? `${BASE}/api/miaoda/dashboard?site_id=${encodeURIComponent(siteId)}`
+    : `${BASE}/api/miaoda/dashboard`;
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) throw new Error("获取达人数据看板失败");
+  return (await res.json()) as MiaodaDashboard;
+}

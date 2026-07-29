@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections import Counter
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Body, Header, HTTPException, Query
@@ -162,7 +163,7 @@ def get_report(record_id: str) -> dict:
 
 
 def _local_influencers() -> list[dict]:
-    """本地达人库兜底：当秒搭未配置/拉取为空时返回。"""
+    """本地达人库兜底：当秒搭未配置/拉取为空时返回（已归一化为看板统一结构）。"""
     with SessionLocal() as db:
         rows = db.query(StandardInfluencer).all()
         return [
@@ -181,15 +182,16 @@ def _local_influencers() -> list[dict]:
         ]
 
 
-@router.get("/influencers")
-def list_miaoda_influencers(
-    site_id: str | None = Query(None, description="可选站点过滤：US / TH / MY"),
-) -> dict:
-    """拉取秒搭达人数据供前端「达人评估」页展示。
+def _load_influencer_cards(site_id: str | None = None) -> tuple[list[dict], str, bool]:
+    """统一拉取达人卡片列表，返回 (items, source, configured)。
 
-    优先从秒搭 OpenAPI 拉取；若未配置密钥或拉取失败/为空，自动回退到本地库，
-    返回统一结构，前端无需关心数据来源。
+    - 优先从秒搭 OpenAPI 拉取（MIAODA_API_URL + MIAODA_API_KEY 已配置时）；
+    - 失败 / 未配置 / 空 -> 回退本地库；
+    - configured 标记秒搭数据源是否已配置，供前端提示。
     """
+    settings = get_settings()
+    configured = bool(settings.MIAODA_API_KEY and settings.MIAODA_API_URL)
+
     items: list[dict] = []
     source = "local"
     try:
@@ -204,9 +206,9 @@ def list_miaoda_influencers(
                         "name": m["influencer_name"],
                         "platform": m["platform"],
                         "followers": m["follower_count"],
-                        "engagement_rate": m["engagement_rate"],
-                        "conversion_rate": m["conversion_rate"],
-                        "roi": m["roi"],
+                        "engagement_rate": m["engagement_rate"] or None,
+                        "conversion_rate": m["conversion_rate"] or None,
+                        "roi": m["roi"] or None,
                         "is_suspicious": m["is_suspicious"],
                         "niche": m["niche"],
                     }
@@ -218,7 +220,86 @@ def list_miaoda_influencers(
         source = "local"
         items = _local_influencers()
 
+    return items, source, configured
+
+
+def _build_summary(items: list[dict]) -> dict:
+    """由达人卡片列表聚合看板所需的 KPI 与可视化数据。"""
+    total = len(items)
+    total_followers = sum(int(i.get("followers") or 0) for i in items)
+    rois = [float(i["roi"]) for i in items if i.get("roi") is not None]
+    avg_roi = round(sum(rois) / len(rois), 2) if rois else 0.0
+    suspicious = sum(1 for i in items if i.get("is_suspicious"))
+
+    plat = Counter((i.get("platform") or "未知") for i in items)
+    platform_distribution = [{"platform": k, "count": v} for k, v in plat.most_common()]
+
+    top = sorted(items, key=lambda x: int(x.get("followers") or 0), reverse=True)[:10]
+    top_by_followers = [
+        {"name": i["name"], "platform": i.get("platform"), "followers": i.get("followers")}
+        for i in top
+    ]
+
+    buckets = {"0-1": 0, "1-3": 0, "3-5": 0, "5+": 0}
+    for i in items:
+        r = i.get("roi")
+        if r is None:
+            continue
+        r = float(r)
+        if r < 1:
+            buckets["0-1"] += 1
+        elif r < 3:
+            buckets["1-3"] += 1
+        elif r < 5:
+            buckets["3-5"] += 1
+        else:
+            buckets["5+"] += 1
+    roi_buckets = [{"range": k, "count": v} for k, v in buckets.items()]
+
+    scatter = [
+        {
+            "name": i["name"],
+            "followers": i.get("followers"),
+            "engagement_rate": i.get("engagement_rate"),
+            "conversion_rate": i.get("conversion_rate"),
+            "roi": i.get("roi"),
+            "is_suspicious": bool(i.get("is_suspicious")),
+        }
+        for i in items
+    ]
+
+    return {
+        "total": total,
+        "total_followers": total_followers,
+        "avg_roi": avg_roi,
+        "suspicious_count": suspicious,
+        "platform_distribution": platform_distribution,
+        "top_by_followers": top_by_followers,
+        "roi_buckets": roi_buckets,
+        "scatter": scatter,
+    }
+
+
+@router.get("/influencers")
+def list_miaoda_influencers(
+    site_id: str | None = Query(None, description="可选站点过滤：US / TH / MY"),
+) -> dict:
+    """拉取秒搭达人数据供前端展示（统一结构，前端无需关心来源）。"""
+    items, source, _ = _load_influencer_cards(site_id)
     return {"source": source, "items": items}
+
+
+@router.get("/dashboard")
+def miaoda_dashboard(
+    site_id: str | None = Query(None, description="可选站点过滤：US / TH / MY"),
+) -> dict:
+    """达人数据看板聚合接口：拉取秒搭（或本地）达人数据，返回 KPI 与可视化所需的聚合指标。
+
+    前端「达人评估」页直接消费本接口即可渲染数据看板；configured 标记秒搭数据源是否已配置。
+    """
+    items, source, configured = _load_influencer_cards(site_id)
+    summary = _build_summary(items)
+    return {"configured": configured, "source": source, "summary": summary, "items": items}
 
 
 @router.post("/evaluate")
