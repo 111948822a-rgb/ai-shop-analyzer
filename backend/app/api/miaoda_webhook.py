@@ -182,18 +182,19 @@ def _local_influencers() -> list[dict]:
         ]
 
 
-def _load_influencer_cards(site_id: str | None = None) -> tuple[list[dict], str, bool]:
-    """统一拉取达人卡片列表，返回 (items, source, configured)。
+def _load_influencer_cards(site_id: str | None = None) -> tuple[list[dict], str, bool, "str | None"]:
+    """统一拉取达人卡片列表，返回 (items, source, configured, error)。
 
     - 优先从秒搭 OpenAPI 拉取（MIAODA_API_URL + MIAODA_API_KEY 已配置时）；
     - 失败 / 未配置 / 空 -> 回退本地库；
-    - configured 标记秒搭数据源是否已配置，供前端提示。
+    - configured 标记秒搭数据源是否已配置；error 携带拉取失败的原始原因，便于前端诊断。
     """
     settings = get_settings()
     configured = bool(settings.MIAODA_API_KEY and settings.MIAODA_API_URL)
 
     items: list[dict] = []
     source = "local"
+    error: "str | None" = None
     try:
         raw = miaoda_data_fetcher.fetch_influencers_from_miaoda(site_id)
         if raw:
@@ -213,14 +214,18 @@ def _load_influencer_cards(site_id: str | None = None) -> tuple[list[dict], str,
                         "niche": m["niche"],
                     }
                 )
+        elif configured:
+            # 已配置但秒搭返回空：明确提示，避免静默回退本地库让用户误以为「没数据」
+            error = "秒搭已配置但返回空数据：请核对 MIAODA_API_URL 路径(/openapi/influencers)、X-API-Key 权限与筛选条件"
     except Exception as e:  # noqa: BLE001
         logger.warning("秒搭达人拉取失败，回退本地库: %s", e)
+        error = f"秒搭拉取失败: {e}"
 
     if not items:
         source = "local"
         items = _local_influencers()
 
-    return items, source, configured
+    return items, source, configured, error
 
 
 def _build_summary(items: list[dict]) -> dict:
@@ -285,7 +290,7 @@ def list_miaoda_influencers(
     site_id: str | None = Query(None, description="可选站点过滤：US / TH / MY"),
 ) -> dict:
     """拉取秒搭达人数据供前端展示（统一结构，前端无需关心来源）。"""
-    items, source, _ = _load_influencer_cards(site_id)
+    items, source, _, _ = _load_influencer_cards(site_id)
     return {"source": source, "items": items}
 
 
@@ -297,9 +302,9 @@ def miaoda_dashboard(
 
     前端「达人评估」页直接消费本接口即可渲染数据看板；configured 标记秒搭数据源是否已配置。
     """
-    items, source, configured = _load_influencer_cards(site_id)
+    items, source, configured, error = _load_influencer_cards(site_id)
     summary = _build_summary(items)
-    return {"configured": configured, "source": source, "summary": summary, "items": items}
+    return {"configured": configured, "source": source, "error": error, "summary": summary, "items": items}
 
 
 @router.post("/evaluate")

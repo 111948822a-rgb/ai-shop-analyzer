@@ -71,7 +71,30 @@ class Settings(BaseSettings):
     def result_backend(self) -> str:
         return self.celery_result_backend or self.redis_url
 
+    @property
+    def database_type(self) -> str:
+        return "postgresql" if self.database_url.startswith(("postgresql", "postgres")) else "sqlite"
+
+    @property
+    def resolved_database_url(self) -> str:
+        return self.database_url
+
+    def __getattr__(self, name: str):
+        # 兼容代码中大小写混用：settings.MIAODA_API_KEY 与 settings.miaoda_api_key 都能命中。
+        # 仅当普通属性查找失败时触发；dunder 名称与未知字段正常抛出 AttributeError。
+        if name.startswith("__") and name.endswith("__"):
+            raise AttributeError(name)
+        lower = name.lower()
+        for fname in type(self).model_fields:
+            if fname.lower() == lower:
+                return object.__getattribute__(self, fname)
+        raise AttributeError(f"{type(self).__name__!r} object has no attribute {name!r}")
+
 
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+# 模块级单例，供 database.py 等执行 `from app.core.config import settings` 使用
+settings = get_settings()
