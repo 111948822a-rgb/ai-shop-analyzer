@@ -182,12 +182,17 @@ def _local_influencers() -> list[dict]:
         ]
 
 
-def _load_influencer_cards(site_id: str | None = None) -> tuple[list[dict], str, bool, "str | None"]:
+def _load_influencer_cards(
+    site_id: str | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> tuple[list[dict], str, bool, "str | None"]:
     """统一拉取达人卡片列表，返回 (items, source, configured, error)。
 
     - 优先从秒搭 OpenAPI 拉取（MIAODA_API_URL + MIAODA_API_KEY 已配置时）；
     - 失败 / 未配置 / 空 -> 回退本地库；
     - configured 标记秒搭数据源是否已配置；error 携带拉取失败的原始原因，便于前端诊断。
+    - start_date/end_date 按 createdAt 过滤（ISO 8601 格式）。
     """
     settings = get_settings()
     configured = bool(settings.MIAODA_API_KEY and settings.MIAODA_API_URL)
@@ -196,7 +201,9 @@ def _load_influencer_cards(site_id: str | None = None) -> tuple[list[dict], str,
     source = "local"
     error: "str | None" = None
     try:
-        raw = miaoda_data_fetcher.fetch_influencers_from_miaoda(site_id)
+        raw = miaoda_data_fetcher.fetch_influencers_from_miaoda(
+            site_id, start_date=start_date, end_date=end_date
+        )
         if raw:
             source = "miaoda"
             for r in raw:
@@ -212,6 +219,12 @@ def _load_influencer_cards(site_id: str | None = None) -> tuple[list[dict], str,
                         "roi": m["roi"] or None,
                         "is_suspicious": m["is_suspicious"],
                         "niche": m["niche"],
+                        "avatar_url": m.get("avatar_url") or "",
+                        "avg_likes": m.get("avg_likes") or 0,
+                        "avg_comments": m.get("avg_comments") or 0,
+                        "total_posts": m.get("total_posts") or 0,
+                        "created_at": m.get("created_at"),
+                        "status": m.get("status"),
                     }
                 )
         elif configured:
@@ -288,23 +301,111 @@ def _build_summary(items: list[dict]) -> dict:
 @router.get("/influencers")
 def list_miaoda_influencers(
     site_id: str | None = Query(None, description="可选站点过滤：US / TH / MY"),
+    start_date: str | None = Query(None, description="起始日期 ISO 8601，如 2026-07-01"),
+    end_date: str | None = Query(None, description="结束日期 ISO 8601，如 2026-07-30"),
 ) -> dict:
     """拉取秒搭达人数据供前端展示（统一结构，前端无需关心来源）。"""
-    items, source, _, _ = _load_influencer_cards(site_id)
+    items, source, _, _ = _load_influencer_cards(site_id, start_date=start_date, end_date=end_date)
     return {"source": source, "items": items}
 
 
 @router.get("/dashboard")
 def miaoda_dashboard(
     site_id: str | None = Query(None, description="可选站点过滤：US / TH / MY"),
+    start_date: str | None = Query(None, description="起始日期 ISO 8601，如 2026-07-01"),
+    end_date: str | None = Query(None, description="结束日期 ISO 8601，如 2026-07-30"),
 ) -> dict:
     """达人数据看板聚合接口：拉取秒搭（或本地）达人数据，返回 KPI 与可视化所需的聚合指标。
 
     前端「达人评估」页直接消费本接口即可渲染数据看板；configured 标记秒搭数据源是否已配置。
+    支持 start_date/end_date 按达人 createdAt 时间范围过滤。
     """
-    items, source, configured, error = _load_influencer_cards(site_id)
+    items, source, configured, error = _load_influencer_cards(
+        site_id, start_date=start_date, end_date=end_date
+    )
     summary = _build_summary(items)
     return {"configured": configured, "source": source, "error": error, "summary": summary, "items": items}
+
+
+@router.post("/report/generate")
+def generate_period_report(
+    payload: dict[str, Any] = Body(...),
+) -> dict:
+    """根据选定的时间段生成达人数据汇总报告。
+
+    请求体：{ "start_date": "2026-07-01", "end_date": "2026-07-30", "site_id": null }
+    返回：该时间段内的达人数据汇总 + 报告内容（Markdown 格式），前端可直接渲染。
+    """
+    start_date = payload.get("start_date")
+    end_date = payload.get("end_date")
+    site_id = payload.get("site_id")
+
+    items, source, configured, error = _load_influencer_cards(
+        site_id, start_date=start_date, end_date=end_date
+    )
+    summary = _build_summary(items)
+
+    # 生成 Markdown 报告
+    period_label = "全部数据"
+    if start_date and end_date:
+        period_label = f"{start_date[:10]} 至 {end_date[:10]}"
+    elif start_date:
+        period_label = f"{start_date[:10]} 至今"
+    elif end_date:
+        period_label = f"截至 {end_date[:10]}"
+
+    platform_lines = "\n".join(
+        f"- {p['platform']}: {p['count']} 人"
+        for p in summary["platform_distribution"]
+    ) or "- 无数据"
+
+    top_lines = "\n".join(
+        f"- {t['name']} ({t['platform'] or '—'}): {t['followers'] or 0} 粉丝"
+        for t in summary["top_by_followers"][:10]
+    ) or "- 无数据"
+
+    report_md = f"""# 达人数据报告
+
+**报告周期**：{period_label}
+**数据来源**：{source}
+**生成时间**：{time.strftime('%Y-%m-%d %H:%M:%S')}
+
+---
+
+## 核心指标
+
+| 指标 | 数值 |
+|------|------|
+| 达人总数 | {summary['total']} |
+| 总粉丝量 | {summary['total_followers']:,} |
+| 平均 ROI | {summary['avg_roi']:.2f} |
+| 异常达人 | {summary['suspicious_count']} 人 |
+
+## 平台分布
+
+{platform_lines}
+
+## 粉丝量 Top 10
+
+{top_lines}
+
+## ROI 分布
+
+| 区间 | 达人数 |
+|------|--------|
+| 0-1 | {summary['roi_buckets'][0]['count']} |
+| 1-3 | {summary['roi_buckets'][1]['count']} |
+| 3-5 | {summary['roi_buckets'][2]['count']} |
+| 5+  | {summary['roi_buckets'][3]['count']} |
+"""
+
+    return {
+        "success": True,
+        "period": {"start_date": start_date, "end_date": end_date, "label": period_label},
+        "summary": summary,
+        "report_md": report_md,
+        "generated_at": time.strftime('%Y-%m-%dT%H:%M:%S'),
+    }
 
 
 @router.post("/evaluate")

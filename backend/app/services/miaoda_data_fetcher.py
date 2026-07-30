@@ -69,6 +69,8 @@ def fetch_influencers_from_miaoda(
     status: Optional[str] = None,
     keyword: Optional[str] = None,
     category: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
     max_retries: int = 3,
 ) -> List[Dict[str, Any]]:
     settings = get_settings()
@@ -167,29 +169,70 @@ def fetch_influencers_from_miaoda(
     if not all_influencers and last_error:
         # 拉取失败（非「无数据」），抛出以便上层向前端暴露真实原因
         raise RuntimeError(last_error)
+
+    # 按日期过滤（妙搭 API 不支持服务端日期筛选，在客户端按 createdAt 过滤）
+    if start_date or end_date:
+        from datetime import datetime, timezone
+        filtered = []
+        for item in all_influencers:
+            created_str = item.get("createdAt") or item.get("created_at") or item.get("createTime")
+            if not created_str:
+                continue
+            try:
+                # 兼容 ISO 8601 带时区 / 不带时区两种格式
+                created_str_clean = created_str.replace("Z", "+00:00")
+                created_dt = datetime.fromisoformat(created_str_clean)
+                if created_dt.tzinfo is None:
+                    created_dt = created_dt.replace(tzinfo=timezone.utc)
+            except (ValueError, TypeError):
+                continue
+            if start_date:
+                try:
+                    sd = datetime.fromisoformat(start_date.replace("Z", "+00:00")).replace(tzinfo=timezone.utc) if "T" not in start_date else datetime.fromisoformat(start_date.replace("Z", "+00:00"))
+                    if sd.tzinfo is None:
+                        sd = sd.replace(tzinfo=timezone.utc)
+                    if created_dt < sd:
+                        continue
+                except (ValueError, TypeError):
+                    pass
+            if end_date:
+                try:
+                    ed = datetime.fromisoformat(end_date.replace("Z", "+00:00")).replace(tzinfo=timezone.utc) if "T" not in end_date else datetime.fromisoformat(end_date.replace("Z", "+00:00"))
+                    if ed.tzinfo is None:
+                        ed = ed.replace(tzinfo=timezone.utc)
+                    if created_dt > ed:
+                        continue
+                except (ValueError, TypeError):
+                    pass
+            filtered.append(item)
+        all_influencers = filtered
+
     return all_influencers
 
 
 def map_influencer_data(raw_data: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "influencer_id": raw_data.get("influencer_id") or raw_data.get("id") or raw_data.get("uid"),
-        "site_code": SITE_CODE_MAP.get(raw_data.get("site_code") or raw_data.get("site") or raw_data.get("country"), "US"),
-        "platform": raw_data.get("platform") or raw_data.get("channel") or "TikTok",
+        "site_code": SITE_CODE_MAP.get(raw_data.get("site_code") or raw_data.get("site") or raw_data.get("siteId") or raw_data.get("country"), "US"),
+        "platform": raw_data.get("platform") or raw_data.get("channel") or raw_data.get("platformId") or "TikTok",
         "influencer_name": raw_data.get("name") or raw_data.get("username") or raw_data.get("nickname") or "Unknown",
-        "avatar_url": raw_data.get("avatar") or raw_data.get("avatar_url") or raw_data.get("profile_picture") or "",
-        "follower_count": _to_number(raw_data.get("followers") or raw_data.get("follower_count") or raw_data.get("fans")),
-        "engagement_rate": _to_number(raw_data.get("engagement_rate") or raw_data.get("engagement")),
-        "conversion_rate": _to_number(raw_data.get("conversion_rate") or raw_data.get("conversion")),
+        "avatar_url": raw_data.get("avatar") or raw_data.get("avatar_url") or raw_data.get("profile_picture") or raw_data.get("thumbnailUrl") or "",
+        "follower_count": _to_number(raw_data.get("followers") or raw_data.get("follower_count") or raw_data.get("followerCount") or raw_data.get("fans")),
+        "engagement_rate": _to_number(raw_data.get("engagement_rate") or raw_data.get("engagement") or raw_data.get("likeRate")),
+        "conversion_rate": _to_number(raw_data.get("conversion_rate") or raw_data.get("conversion") or raw_data.get("fulfillmentRate")),
         "roi": _to_number(raw_data.get("roi") or raw_data.get("return_on_investment")),
-        "is_suspicious": bool(raw_data.get("is_suspicious") or raw_data.get("suspicious") or False),
+        "is_suspicious": bool(raw_data.get("is_suspicious") or raw_data.get("suspicious") or raw_data.get("status") == "rejected" or False),
         "suspicious_reason": raw_data.get("suspicious_reason") or raw_data.get("risk_reason") or "",
-        "country": raw_data.get("country") or raw_data.get("region") or "",
+        "country": raw_data.get("country") or raw_data.get("region") or raw_data.get("siteId") or "",
         "language": LANGUAGE_MAP.get(raw_data.get("language") or raw_data.get("lang"), "en"),
         "niche": raw_data.get("niche") or raw_data.get("category") or raw_data.get("vertical") or "General",
-        "total_posts": _to_number(raw_data.get("total_posts") or raw_data.get("posts") or raw_data.get("content_count")),
-        "avg_likes": _to_number(raw_data.get("avg_likes") or raw_data.get("average_likes") or raw_data.get("likes")),
-        "avg_comments": _to_number(raw_data.get("avg_comments") or raw_data.get("average_comments") or raw_data.get("comments")),
+        "total_posts": _to_number(raw_data.get("total_posts") or raw_data.get("posts") or raw_data.get("content_count") or raw_data.get("viewCount")),
+        "avg_likes": _to_number(raw_data.get("avg_likes") or raw_data.get("average_likes") or raw_data.get("likes") or raw_data.get("likeCount")),
+        "avg_comments": _to_number(raw_data.get("avg_comments") or raw_data.get("average_comments") or raw_data.get("comments") or raw_data.get("commentCount")),
         "avg_shares": _to_number(raw_data.get("avg_shares") or raw_data.get("average_shares") or raw_data.get("shares")),
+        "created_at": raw_data.get("createdAt") or raw_data.get("created_at") or raw_data.get("createTime") or None,
+        "updated_at": raw_data.get("updatedAt") or raw_data.get("updated_at") or None,
+        "status": raw_data.get("status") or "active",
     }
 
 

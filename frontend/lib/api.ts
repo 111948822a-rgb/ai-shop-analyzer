@@ -228,6 +228,12 @@ export interface MiaodaInfluencer {
   roi: number | null;
   is_suspicious: boolean;
   niche: string | null;
+  avatar_url?: string;
+  avg_likes?: number;
+  avg_comments?: number;
+  total_posts?: number;
+  created_at?: string | null;
+  status?: string;
 }
 
 export async function getMiaodaInfluencers(
@@ -285,12 +291,39 @@ export interface MiaodaDashboard {
 }
 
 export async function getMiaodaDashboard(
-  siteId?: string
+  siteId?: string,
+  dateRange?: { start_date?: string; end_date?: string }
 ): Promise<MiaodaDashboard> {
-  const url = siteId
-    ? `${BASE}/api/miaoda/dashboard?site_id=${encodeURIComponent(siteId)}`
+  const params = new URLSearchParams();
+  if (siteId) params.set("site_id", siteId);
+  if (dateRange?.start_date) params.set("start_date", dateRange.start_date);
+  if (dateRange?.end_date) params.set("end_date", dateRange.end_date);
+  const qs = params.toString();
+  const url = qs
+    ? `${BASE}/api/miaoda/dashboard?${qs}`
     : `${BASE}/api/miaoda/dashboard`;
   const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) throw new Error("获取达人数据看板失败");
   return (await res.json()) as MiaodaDashboard;
+}
+
+// ===================== 达人时间段报告生成 =====================
+export interface PeriodReport {
+  success: boolean;
+  period: { start_date: string | null; end_date: string | null; label: string };
+  summary: MiaodaSummary;
+  report_md: string;
+  generated_at: string;
+}
+
+export async function generatePeriodReport(
+  payload: { start_date?: string; end_date?: string; site_id?: string }
+): Promise<PeriodReport> {
+  const res = await fetch(`${BASE}/api/miaoda/report/generate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error((await res.json()).detail ?? "生成报告失败");
+  return (await res.json()) as PeriodReport;
 }

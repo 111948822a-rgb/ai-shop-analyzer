@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, useCallback } from "react";
+import ReactMarkdown from "react-markdown";
 import {
   Bar,
   BarChart,
@@ -20,11 +20,16 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import TimeSlicer, {
+  type PeriodPreset,
+  type DateRange,
+  presetToRange,
+} from "@/components/dashboard/TimeSlicer";
 import {
-  evaluateInfluencer,
   getMiaodaDashboard,
+  generatePeriodReport,
   type MiaodaDashboard,
-  type MiaodaInfluencer,
+  type PeriodReport,
 } from "@/lib/api";
 
 const PIE_COLORS = ["#6366f1", "#22c55e", "#f59e0b", "#ef4444", "#06b6d4", "#a855f7"];
@@ -35,93 +40,115 @@ function fmtFollowers(n: number | null): string {
   return n.toLocaleString("zh-CN");
 }
 
-function pct(v: number | null): string {
-  if (v == null) return "—";
-  return `${v}%`;
-}
-
 export default function InfluencersDashboardPage() {
-  const router = useRouter();
   const [data, setData] = useState<MiaodaDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [evaluating, setEvaluating] = useState<string | null>(null);
 
-  useEffect(() => {
-    getMiaodaDashboard()
-      .then((d) => {
-        setData(d);
-        setLoading(false);
-      })
-      .catch((e) => {
-        setError(e instanceof Error ? e.message : "加载达人数据看板失败");
-        setLoading(false);
-      });
+  // 全局时间切片
+  const [period, setPeriod] = useState<PeriodPreset>("30d");
+  const [dateRange, setDateRange] = useState<DateRange>({});
+
+  // 报告生成
+  const [reportPeriod, setReportPeriod] = useState<PeriodPreset>("30d");
+  const [reportRange, setReportRange] = useState<DateRange>({});
+  const [report, setReport] = useState<PeriodReport | null>(null);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportError, setReportError] = useState("");
+
+  const fetchData = useCallback(async (range: DateRange) => {
+    setLoading(true);
+    setError("");
+    try {
+      const d = await getMiaodaDashboard(undefined, range);
+      setData(d);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "加载达人数据看板失败");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  async function generateReport(inf: MiaodaInfluencer) {
-    setEvaluating(inf.influencer_id);
-    try {
-      const r = await evaluateInfluencer({
-        influencer_id: inf.influencer_id,
-        influencer_name: inf.name,
-        platform: inf.platform,
-        followers: inf.followers,
-        target_product: "",
-      });
-      router.push(`/report/influencer/${r.record_id}`);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "生成报告失败");
-      setEvaluating(null);
-    }
-  }
+  useEffect(() => {
+    fetchData(dateRange);
+  }, [dateRange, fetchData]);
 
-  if (loading) return <p className="text-gray-500">正在加载达人数据看板…</p>;
-  if (error) return <p className="text-red-600">{error}</p>;
+  const handlePeriodChange = useCallback((preset: PeriodPreset, range: DateRange) => {
+    setPeriod(preset);
+    setDateRange(range);
+  }, []);
+
+  const handleReportPeriodChange = useCallback((preset: PeriodPreset, range: DateRange) => {
+    setReportPeriod(preset);
+    setReportRange(range);
+  }, []);
+
+  const handleGenerateReport = async () => {
+    setReportLoading(true);
+    setReportError("");
+    setReport(null);
+    try {
+      const r = await generatePeriodReport({
+        start_date: reportRange.start_date,
+        end_date: reportRange.end_date,
+      });
+      setReport(r);
+    } catch (e) {
+      setReportError(e instanceof Error ? e.message : "生成报告失败");
+    } finally {
+      setReportLoading(false);
+    }
+  };
+
+  if (loading && !data) return <p className="text-gray-500">正在加载达人数据看板…</p>;
+  if (error && !data) return <p className="text-red-600">{error}</p>;
   if (!data) return null;
 
-  const { summary, items, configured, source, error: miaodaError } = data;
+  const { summary, configured, source, error: miaodaError } = data;
   const suspiciousRate =
     summary.total > 0
       ? ((summary.suspicious_count / summary.total) * 100).toFixed(1)
       : "0.0";
 
+  // 计算平均互动率/转化率（从 scatter 数据）
+  const engagementValues = summary.scatter
+    .map((s) => s.engagement_rate)
+    .filter((v): v is number => v != null && v > 0);
+  const avgEngagement =
+    engagementValues.length > 0
+      ? (engagementValues.reduce((a, b) => a + b, 0) / engagementValues.length).toFixed(1)
+      : "0.0";
+
+  const conversionValues = summary.scatter
+    .map((s) => s.conversion_rate)
+    .filter((v): v is number => v != null && v > 0);
+  const avgConversion =
+    conversionValues.length > 0
+      ? (conversionValues.reduce((a, b) => a + b, 0) / conversionValues.length).toFixed(1)
+      : "0.0";
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-2">
-        <div>
-          <h1 className="text-2xl font-bold">达人数据看板</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            数据来源：
-            <span className="font-medium">
-              {source === "miaoda" ? "秒搭系统" : "本地库"}
-            </span>
-            {!configured && (
-              <span className="ml-2 text-amber-600">
-                （秒搭数据源未配置，当前为本地/示例数据）
-              </span>
-            )}
-          </p>
-        </div>
+      {/* ---- 标题 ---- */}
+      <div>
+        <h1 className="text-2xl font-bold">达人数据看板</h1>
+        <p className="text-sm text-gray-500 mt-1">
+          数据来源：<span className="font-medium">{source === "miaoda" ? "秒搭系统" : "本地库"}</span>
+          {loading && <span className="ml-2 text-indigo-500">刷新中…</span>}
+        </p>
       </div>
 
-      {!configured && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-          <strong>提示：</strong> 后端尚未配置 <code>MIAODA_API_URL</code> 与{" "}
-          <code>MIAODA_API_KEY</code>，因此目前看不到秒搭实时达人数据。请在 Render 后端环境变量中填好这两项（
-          <code>MIAODA_API_URL</code> 填完整地址，例如{" "}
-          <code>https://&lt;域名&gt;/app/&lt;appId&gt;/openapi/influencers</code>
-          ），并在秒搭后台确认该 OpenAPI 已发布、所用 Key 已授权，重新部署后即可在此看到真实看板。
-        </div>
-      )}
+      {/* ---- 全局时间切片 ---- */}
+      <Card>
+        <CardContent className="pt-4">
+          <TimeSlicer value={period} onChange={handlePeriodChange} />
+        </CardContent>
+      </Card>
 
+      {/* ---- 秒搭拉取失败提示 ---- */}
       {configured && source !== "miaoda" && miaodaError && (
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          <strong>秒搭数据拉取失败：</strong> 后端已配置数据源，但秒搭拒绝了请求。真实原因：
-          <div className="mt-1 font-mono text-xs break-all">{miaodaError}</div>
-          <div className="mt-2">
-            通常是以下原因之一：① 秒搭 API Key 无效 / 未授权 / 与 appId 不匹配；② 该 OpenAPI 接口未发布。请到秒搭后台核对 Key 与接口权限。
-          </div>
+          <strong>秒搭数据拉取失败：</strong> {miaodaError}
         </div>
       )}
 
@@ -129,7 +156,7 @@ export default function InfluencersDashboardPage() {
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <KpiCard label="达人总数" value={summary.total.toLocaleString("zh-CN")} />
         <KpiCard label="总粉丝量" value={fmtFollowers(summary.total_followers)} />
-        <KpiCard label="平均 ROI" value={summary.avg_roi.toFixed(2)} />
+        <KpiCard label="平均互动率" value={`${avgEngagement}%`} />
         <KpiCard
           label="异常占比"
           value={`${suspiciousRate}%`}
@@ -188,71 +215,117 @@ export default function InfluencersDashboardPage() {
                 </ResponsiveContainer>
               </div>
             ) : (
-              <Empty />
+              <Empty text="暂无 ROI 数据" />
             )}
           </CardContent>
         </Card>
       </div>
 
-      {/* ---- 达人明细表 + 生成报告 ---- */}
+      {/* ---- 粉丝量 Top 10 达人 ---- */}
+      {summary.top_by_followers.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>粉丝量 Top 10</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-5">
+              {summary.top_by_followers.map((inf, i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-3 rounded-lg border border-gray-100 bg-gray-50 p-3"
+                >
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-xs font-bold text-indigo-600">
+                    {i + 1}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-gray-900">{inf.name}</p>
+                    <p className="text-xs text-gray-400">
+                      {inf.platform || "—"} · {fmtFollowers(inf.followers)}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ---- 手动生成报告 ---- */}
       <Card>
         <CardHeader>
-          <CardTitle>达人明细（手动生成报告）</CardTitle>
+          <CardTitle>手动生成报告</CardTitle>
         </CardHeader>
-        <CardContent>
-          {items.length === 0 ? (
-            <Empty text="暂无达人数据" />
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left text-gray-400">
-                    <th className="py-2 pr-4 font-medium">达人</th>
-                    <th className="py-2 pr-4 font-medium">平台</th>
-                    <th className="py-2 pr-4 text-right font-medium">粉丝</th>
-                    <th className="py-2 pr-4 text-right font-medium">ROI</th>
-                    <th className="py-2 pr-4 font-medium">状态</th>
-                    <th className="py-2 text-right font-medium">操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((inf) => (
-                    <tr key={inf.influencer_id} className="border-b last:border-0">
-                      <td className="py-3 pr-4">
-                        <div className="font-medium text-gray-900">{inf.name}</div>
-                        <div className="text-xs text-gray-400">
-                          {inf.niche || "未知类目"}
-                        </div>
-                      </td>
-                      <td className="py-3 pr-4 text-gray-600">{inf.platform || "—"}</td>
-                      <td className="py-3 pr-4 text-right text-gray-800">
-                        {fmtFollowers(inf.followers)}
-                      </td>
-                      <td className="py-3 pr-4 text-right text-gray-800">
-                        {inf.roi == null ? "—" : inf.roi.toFixed(2)}
-                      </td>
-                      <td className="py-3 pr-4">
-                        {inf.is_suspicious ? (
-                          <Badge className="bg-red-100 text-red-600 border-transparent">
-                            疑似异常
-                          </Badge>
-                        ) : (
-                          <span className="text-gray-400">正常</span>
-                        )}
-                      </td>
-                      <td className="py-3 text-right">
-                        <button
-                          onClick={() => generateReport(inf)}
-                          disabled={evaluating === inf.influencer_id}
-                          className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-indigo-700 disabled:opacity-50"
-                        >
-                          {evaluating === inf.influencer_id ? "生成中…" : "生成报告"}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+        <CardContent className="space-y-4">
+          {/* 报告时间选择 */}
+          <div>
+            <p className="mb-2 text-sm font-medium text-gray-600">选择报告时间段：</p>
+            <TimeSlicer value={reportPeriod} onChange={handleReportPeriodChange} />
+          </div>
+
+          {/* 生成按钮 */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleGenerateReport}
+              disabled={reportLoading}
+              className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {reportLoading ? "生成中…" : "生成报告"}
+            </button>
+            {report && (
+              <button
+                onClick={() => {
+                  const blob = new Blob([report.report_md], { type: "text/markdown" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = `达人报告_${report.period.label}.md`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+                className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-600 transition hover:bg-gray-50"
+              >
+                下载 Markdown
+              </button>
+            )}
+          </div>
+
+          {/* 错误提示 */}
+          {reportError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-600">
+              {reportError}
+            </div>
+          )}
+
+          {/* 报告内容展示 */}
+          {report && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 border-b pb-2">
+                <Badge className="bg-green-100 text-green-700 border-transparent">
+                  已生成
+                </Badge>
+                <span className="text-sm text-gray-500">
+                  {report.period.label} · 生成于 {new Date(report.generated_at).toLocaleString("zh-CN")}
+                </span>
+              </div>
+              <div className="prose prose-sm max-w-none rounded-lg border border-gray-100 bg-gray-50 p-4">
+                <ReactMarkdown
+                  components={{
+                    table: ({ children }) => (
+                      <table className="w-full border-collapse text-sm">{children}</table>
+                    ),
+                    th: ({ children }) => (
+                      <th className="border border-gray-200 bg-gray-100 px-3 py-1.5 text-left font-medium">
+                        {children}
+                      </th>
+                    ),
+                    td: ({ children }) => (
+                      <td className="border border-gray-200 px-3 py-1.5">{children}</td>
+                    ),
+                  }}
+                >
+                  {report.report_md}
+                </ReactMarkdown>
+              </div>
             </div>
           )}
         </CardContent>
