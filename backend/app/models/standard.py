@@ -36,6 +36,7 @@ from app.db import Base
 class Platform(str, enum.Enum):
     DOUYIN = "douyin"   # 抖店
     TAOBAO = "taobao"   # 淘宝
+    TIKTOK = "tiktok"   # TikTok Shop（全球店铺 Partner API）
     MANUAL = "manual"   # 手动上传
 
 

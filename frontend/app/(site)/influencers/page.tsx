@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import {
   Bar,
@@ -129,13 +130,27 @@ export default function InfluencersDashboardPage() {
 
   return (
     <div className="space-y-6">
-      {/* ---- 标题 ---- */}
-      <div>
-        <h1 className="text-2xl font-bold">达人数据看板</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          数据来源：<span className="font-medium">{source === "miaoda" ? "秒搭系统" : "本地库"}</span>
-          {loading && <span className="ml-2 text-indigo-500">刷新中…</span>}
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <div className="mb-2 flex items-center gap-3">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+            >
+              <span aria-hidden>←</span> 返回主页
+            </Link>
+          </div>
+          <h1 className="text-2xl font-bold">达人数据看板</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            数据来源：<span className="font-medium">{source === "miaoda" ? "秒搭系统" : "本地库"}</span>
+            {!configured && (
+              <span className="ml-2 text-amber-600">
+                （秒搭数据源未配置，当前为本地/示例数据）
+              </span>
+            )}
+            {loading && <span className="ml-2 text-indigo-500">刷新中…</span>}
+          </p>
+        </div>
       </div>
 
       {/* ---- 全局时间切片 ---- */}

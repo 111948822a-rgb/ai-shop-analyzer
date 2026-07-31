@@ -327,3 +327,79 @@ export async function generatePeriodReport(
   if (!res.ok) throw new Error((await res.json()).detail ?? "生成报告失败");
   return (await res.json()) as PeriodReport;
 }
+
+// ===================== TikTok Shop 数据同步 =====================
+export interface TikTokStatus {
+  configured: boolean;
+  shop_id: string | null;
+  token: {
+    has_access_token: boolean;
+    has_refresh_token: boolean;
+    is_expiring_soon: boolean;
+    expires_at: string | null;
+    remaining_hours: number | null;
+  };
+}
+
+export interface TikTokSyncResult {
+  status: "scheduled" | "done";
+  start: string;
+  end: string;
+  message?: string;
+  result?: {
+    orders: { total_fetched: number; inserted: number; updated: number; skipped: number };
+    products: { total_fetched: number; inserted: number; updated: number; skipped: number };
+  };
+}
+
+export async function getTikTokStatus(): Promise<TikTokStatus> {
+  const res = await fetch(`${BASE}/api/tiktok/status`, { cache: "no-store" });
+  if (!res.ok) throw new Error("获取 TikTok 状态失败");
+  return (await res.json()) as TikTokStatus;
+}
+
+export async function syncTikTokData(
+  days = 7,
+  foreground = false
+): Promise<TikTokSyncResult> {
+  const res = await fetch(
+    `${BASE}/api/tiktok/sync?foreground=${foreground}&days=${days}`,
+    { method: "POST", cache: "no-store" }
+  );
+  if (!res.ok) throw new Error((await res.json()).detail ?? "同步失败");
+  return (await res.json()) as TikTokSyncResult;
+}
+
+// ===================== AI 分析报告 =====================
+export interface AIReportResponse {
+  report_id: string;
+  status: "pending" | "running" | "done" | "failed";
+  content_md: string;
+  error: string;
+}
+
+export async function generateAIReport(
+  days: number,
+  query = "",
+  foreground = false
+): Promise<AIReportResponse> {
+  const res = await fetch(
+    `${BASE}/api/ai-report/generate?foreground=${foreground}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ days, query }),
+      cache: "no-store",
+    }
+  );
+  if (!res.ok) throw new Error((await res.json()).detail ?? "生成报告失败");
+  return (await res.json()) as AIReportResponse;
+}
+
+export async function getAIReport(reportId: string): Promise<AIReportResponse> {
+  const res = await fetch(`${BASE}/api/ai-report/${reportId}`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("获取报告失败");
+  return (await res.json()) as AIReportResponse;
+}

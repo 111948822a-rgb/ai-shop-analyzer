@@ -11,7 +11,7 @@ from typing import Any
 from fastapi import Body, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import analyze, dashboard, feishu_events, miaoda_webhook, reports, upload
+from app.api import ai_report, analyze, dashboard, feishu_events, miaoda_webhook, reports, tiktok_sync, upload
 from app.core.config import get_settings
 from app.services import feishu
 
@@ -32,9 +32,8 @@ app = FastAPI(title="AI Shop Analyzer API", version="0.2.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    # 部署到 Render 后前端域名不固定，放开跨域（如需收紧可改为具体域名列表）
-    allow_origins=["*"],
-    allow_credentials=False,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -51,16 +50,14 @@ app.include_router(feishu_events.router)
 app.include_router(dashboard.router)
 # ---- 飞书秒搭 Webhook + H5 报告查询 ----
 app.include_router(miaoda_webhook.router)
+# ---- TikTok Shop 数据同步 ----
+app.include_router(tiktok_sync.router)
+# ---- AI 分析报告生成 ----
+app.include_router(ai_report.router)
 
 
 @app.get("/api/health")
 def health() -> dict:
-    return {"status": "ok"}
-
-
-@app.get("/health")
-def health_check() -> dict:
-    """Render healthCheckPath 指向 /health，保留兼容端点。"""
     return {"status": "ok"}
 
 

@@ -11,6 +11,7 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 TIKTOK_AUTH_URL = "https://auth.tiktok-shops.com/api/v2/token/get"
+TIKTOK_REFRESH_URL = "https://auth.tiktok-shops.com/api/v2/token/refresh"
 
 _token_cache = {
     "access_token": None,
@@ -148,7 +149,7 @@ def _refresh_token() -> bool:
 
     try:
         logger.info("Refreshing TikTok access token...")
-        response = requests.get(TIKTOK_AUTH_URL, params=params, timeout=30)
+        response = requests.get(TIKTOK_REFRESH_URL, params=params, timeout=30)
         response.raise_for_status()
         
         result = response.json()

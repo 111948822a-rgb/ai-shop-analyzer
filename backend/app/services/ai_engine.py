@@ -30,8 +30,8 @@ TOOL_SCHEMAS = [
                     "end_date": {"type": "string", "description": "结束日期 YYYY-MM-DD"},
                     "platform": {
                         "type": "string",
-                        "description": "可选：douyin / taobao",
-                        "enum": ["douyin", "taobao"],
+                        "description": "可选：tiktok / douyin / taobao",
+                        "enum": ["tiktok", "douyin", "taobao"],
                     },
                 },
                 "required": ["start_date", "end_date"],

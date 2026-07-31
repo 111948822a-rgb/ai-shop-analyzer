@@ -17,7 +17,7 @@ class Settings(BaseSettings):
 
     # 通义千问 / 阿里云 Dashscope
     dashscope_api_key: str = ""
-    qwen_model: str = "Qwen3.7-MAX"
+    qwen_model: str = "qwen-max"
 
     # 飞书
     feishu_webhook_url: str = ""
