@@ -32,7 +32,11 @@ app = FastAPI(title="AI Shop Analyzer API", version="0.2.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "https://ai-shop-analyzer-frontend.onrender.com",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -56,6 +60,7 @@ app.include_router(tiktok_sync.router)
 app.include_router(ai_report.router)
 
 
+@app.get("/health")
 @app.get("/api/health")
 def health() -> dict:
     return {"status": "ok"}
