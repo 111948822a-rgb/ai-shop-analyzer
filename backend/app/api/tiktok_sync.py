@@ -46,7 +46,7 @@ def tiktok_status() -> dict:
 def tiktok_sync(
     background_tasks: BackgroundTasks,
     foreground: bool = Query(False, description="前台同步执行（调试用），默认后台异步"),
-    days: int = Query(7, ge=1, le=90, description="回溯天数"),
+    days: int = Query(7, ge=1, le=365, description="回溯天数"),
 ) -> dict:
     """触发一次 TikTok 订单+商品同步。"""
     if not (

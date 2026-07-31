@@ -36,6 +36,53 @@ def _window(days: int) -> tuple[datetime, datetime, datetime, datetime]:
     return start, end_exclusive, prev_start, prev_end_exclusive
 
 
+def _actual_data_range(db: Session, shop_conds: list | None = None) -> tuple[datetime | None, datetime | None]:
+    """查询数据库中实际订单的最早/最晚 paid_at。
+
+    TK API 时间过滤不生效，同步下来的订单可能是几个月前的，
+    看板按"近N天"窗口过滤会显示空。此时需要知道数据实际范围。
+    """
+    where = []
+    if shop_conds:
+        where.extend(shop_conds)
+    where.append(StandardOrder.paid_at.isnot(None))
+    stmt = select(
+        func.min(StandardOrder.paid_at).label("earliest"),
+        func.max(StandardOrder.paid_at).label("latest"),
+    ).where(*where)
+    row = db.execute(stmt).one()
+    return row.earliest, row.latest
+
+
+def _effective_window(
+    db: Session, days: int, shop_conds: list | None = None
+) -> tuple[datetime, datetime, bool]:
+    """计算有效查询窗口。
+
+    先按"近 days 天"算窗口；若该窗口内有数据则用它。
+    若窗口内无数据但数据库里有数据（TK API 时间过滤不生效导致订单都在几个月前），
+    则回退到 [数据最早日期, 数据最晚日期+1天]，让看板能显示已同步的数据。
+    返回 (start, end_exclusive, fallback)。
+    """
+    start, end_ex, _, _ = _window(days)
+    # 检查窗口内是否有数据
+    where = [StandardOrder.paid_at >= start, StandardOrder.paid_at < end_ex]
+    if shop_conds:
+        where.extend(shop_conds)
+    cnt = db.execute(
+        select(func.count(StandardOrder.id)).where(*where)
+    ).scalar()
+    if cnt and cnt > 0:
+        return start, end_ex, False
+
+    # 窗口内无数据，回退到全部数据范围
+    earliest, latest = _actual_data_range(db, shop_conds)
+    if earliest and latest:
+        return earliest, latest + timedelta(days=1), True
+    # 数据库完全没数据，用原窗口
+    return start, end_ex, False
+
+
 def _shop_filter_conditions(shop_ids: list[str] | None) -> list:
     """把前端传来的店铺ID列表转成 SQLAlchemy 过滤条件。
 
@@ -99,7 +146,11 @@ def dashboard_overview(
     db: Session = Depends(get_db),
 ) -> dict:
     shop_conds = _shop_filter_conditions(shop_ids.split(",") if shop_ids else None)
-    start, end_ex, prev_start, prev_end_ex = _window(days)
+    start, end_ex, fallback = _effective_window(db, days, shop_conds)
+    # 环比窗口：以有效窗口长度等长左移
+    eff_days = max((end_ex - start).days, 1)
+    prev_end_ex = start
+    prev_start = prev_end_ex - timedelta(days=eff_days)
     cur = _period_agg(db, start, end_ex, shop_conds)
     prev = _period_agg(db, prev_start, prev_end_ex, shop_conds)
 
@@ -117,7 +168,8 @@ def dashboard_overview(
         "period": {
             "start": start.strftime("%Y-%m-%d"),
             "end": (end_ex - timedelta(seconds=1)).strftime("%Y-%m-%d"),
-            "days": days,
+            "days": eff_days,
+            "fallback": fallback,  # True 表示回退到了全部数据范围
         },
         "previous_period": {
             "start": prev_start.strftime("%Y-%m-%d"),
@@ -140,7 +192,7 @@ def gmv_trend(
     db: Session = Depends(get_db),
 ) -> dict:
     shop_conds = _shop_filter_conditions(shop_ids.split(",") if shop_ids else None)
-    start, end_ex, _, _ = _window(days)
+    start, end_ex, _ = _effective_window(db, days, shop_conds)
     where_clauses = [StandardOrder.paid_at >= start, StandardOrder.paid_at < end_ex]
     if shop_conds:
         where_clauses.extend(shop_conds)
@@ -156,7 +208,7 @@ def gmv_trend(
     rows = db.execute(stmt).all()
     gmv_by_day = {str(r.day): round(float(r.gmv), 2) for r in rows}
 
-    # 补齐缺失日期（最多 days 个），保证折线图横轴连续
+    # 补齐缺失日期，保证折线图横轴连续
     series = []
     d = start.date()
     end = (end_ex - timedelta(seconds=1)).date()
@@ -177,7 +229,7 @@ def top_products(
     db: Session = Depends(get_db),
 ) -> dict:
     shop_conds = _shop_filter_conditions(shop_ids.split(",") if shop_ids else None)
-    start, end_ex, _, _ = _window(days)
+    start, end_ex, _ = _effective_window(db, days, shop_conds)
     where_clauses = [StandardOrder.paid_at >= start, StandardOrder.paid_at < end_ex]
     if shop_conds:
         where_clauses.extend(shop_conds)

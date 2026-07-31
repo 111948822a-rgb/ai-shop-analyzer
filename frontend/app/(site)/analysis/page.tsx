@@ -49,7 +49,7 @@ function DashboardInner() {
   const [tkStatus, setTkStatus] = useState<TikTokStatus | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
-  const [syncDays, setSyncDays] = useState(7);
+  const [syncDays, setSyncDays] = useState(180);
 
   // AI 报告状态
   const [aiReport, setAiReport] = useState<AIReportResponse | null>(null);
@@ -157,7 +157,7 @@ function DashboardInner() {
             <p className="text-sm text-gray-500">
               {shopIds ? `已选店铺：${shopIds.join("、")} · ` : "全部店铺 · "}
               {overview
-                ? `统计区间：${overview.period.start} ~ ${overview.period.end}（近 ${overview.period.days} 天）`
+                ? `统计区间：${overview.period.start} ~ ${overview.period.end}${overview.period.fallback ? "（近N天无数据，已显示全部已同步数据）" : `（近 ${overview.period.days} 天）`}`
                 : "加载中…"}
             </p>
           </div>
@@ -218,7 +218,7 @@ function DashboardInner() {
             {tkStatus?.configured && (
               <div className="flex flex-wrap items-center gap-2">
                 <div className="flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
-                  {[3, 7, 30].map((d) => (
+                  {[7, 30, 90, 180].map((d) => (
                     <button
                       key={d}
                       onClick={() => setSyncDays(d)}
