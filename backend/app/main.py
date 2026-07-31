@@ -25,25 +25,41 @@ async def lifespan(app: FastAPI):
     from app.db import Base, engine
     from sqlalchemy import text
 
-    # 迁移：旧的 standard_orders/platform 是 PostgreSQL 原生 enum 类型，
+    # 迁移：旧的 platform / status 列用的是 PostgreSQL 原生 enum 类型，
     # 新增 TIKTOK 枚举值时无法自动 ALTER TYPE，改为 VARCHAR + CHECK。
-    # 检测到旧 enum 列时，DROP 相关表和类型，让下面的 create_all 用新结构重建。
+    # 检测到任一 standard 表的 platform 列为 USER-DEFINED（enum）时，
+    # DROP 相关表和类型，让下面的 create_all 用新结构（VARCHAR）重建。
     if engine.dialect.name == "postgresql":
         try:
             with engine.connect() as conn:
-                row = conn.execute(text(
-                    "SELECT data_type FROM information_schema.columns "
-                    "WHERE table_name = 'standard_orders' AND column_name = 'platform'"
-                )).fetchone()
-                if row and row[0] == "USER-DEFINED":
-                    print("[migrate] 检测到旧 PG enum 列，重建 standard 表为 VARCHAR 结构...")
+                # 检测三个表里是否有任一 platform 列仍是原生 enum
+                rows = conn.execute(text(
+                    "SELECT table_name, data_type FROM information_schema.columns "
+                    "WHERE column_name = 'platform' "
+                    "AND table_name IN ('standard_orders','standard_products','standard_influencers')"
+                )).fetchall()
+                need_migrate = any(r[1] == "USER-DEFINED" for r in rows)
+                if need_migrate:
+                    print(f"[migrate] 检测到旧 PG enum 列: {rows}，重建 standard 表为 VARCHAR 结构...")
                     conn.execute(text("DROP TABLE IF EXISTS standard_orders CASCADE"))
                     conn.execute(text("DROP TABLE IF EXISTS standard_products CASCADE"))
                     conn.execute(text("DROP TABLE IF EXISTS standard_influencers CASCADE"))
-                    conn.execute(text("DROP TYPE IF EXISTS platform"))
-                    conn.execute(text("DROP TYPE IF EXISTS orderstatus"))
+                    # 清理可能残留的 enum 类型（多种可能的命名）
+                    for t in ("platform", "orderstatus", "Platform", "OrderStatus"):
+                        conn.execute(text(f"DROP TYPE IF EXISTS {t} CASCADE"))
+                    # 兜底：删除所有名为 platform/orderstatus 的独立类型
+                    conn.execute(text(
+                        "DO $$ DECLARE r RECORD; BEGIN "
+                        "FOR r IN SELECT t.typname FROM pg_type t "
+                        "JOIN pg_namespace n ON t.typnamespace=n.oid "
+                        "WHERE n.nspname='public' AND t.typtype='e' "
+                        "AND t.typname IN ('platform','orderstatus','Platform','OrderStatus') "
+                        "LOOP EXECUTE 'DROP TYPE IF EXISTS ' || r.typname || ' CASCADE'; END LOOP; END $$;"
+                    ))
                     conn.commit()
-                    print("[migrate] 旧表已删除，将由 create_all 重建")
+                    print("[migrate] 旧表与 enum 类型已删除，将由 create_all 重建")
+                else:
+                    print(f"[migrate] platform 列已是 VARCHAR，无需迁移: {rows}")
         except Exception as e:
             print(f"[migrate] 迁移检查跳过: {e}")
 
