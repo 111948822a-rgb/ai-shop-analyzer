@@ -194,10 +194,12 @@ class TikTokShopPartnerAPI:
             if not result:
                 break
             orders = result.get("orders", [])
-            total = result.get("total", 0)
-            logger.info(f"Fetched page {page_no}: {len(orders)} orders, total {total}")
+            # 注意: TK API 的 total 不可靠（常返回 0 但实际有数据），
+            # 不能用 len(all_orders) >= total 判断是否拉完。
+            # 改为：返回空或不足一页时停止。
+            logger.info(f"Fetched page {page_no}: {len(orders)} orders")
             all_orders.extend(orders)
-            if len(all_orders) >= total or not orders:
+            if not orders or len(orders) < page_size:
                 break
             page_no += 1
         return all_orders
@@ -217,10 +219,9 @@ class TikTokShopPartnerAPI:
             if not result:
                 break
             products = result.get("products", [])
-            total = result.get("total", 0)
-            logger.info(f"Fetched page {page_no}: {len(products)} products, total {total}")
+            logger.info(f"Fetched page {page_no}: {len(products)} products")
             all_products.extend(products)
-            if len(all_products) >= total or not products:
+            if not products or len(products) < page_size:
                 break
             page_no += 1
         return all_products
@@ -319,7 +320,7 @@ def map_tiktok_order(raw_order: Dict[str, Any]) -> Dict[str, Any]:
         "product_name": str(product_name)[:255],
         "gmv": round(gmv, 2),
         "quantity": quantity,
-        "customer_id": str(raw_order.get("buyer_email") or raw_order.get("customer_id") or raw_order.get("buyer_id") or "") or None,
+        "customer_id": str(raw_order.get("buyer_email") or raw_order.get("user_id") or raw_order.get("customer_id") or "") or None,
         "creator_id": str(
             raw_order.get("creator_id") or raw_order.get("influencer_id") or ""
         ) or None,
@@ -327,21 +328,48 @@ def map_tiktok_order(raw_order: Dict[str, Any]) -> Dict[str, Any]:
         "paid_at": _parse_tiktok_datetime(
             raw_order.get("paid_time") or raw_order.get("create_time") or raw_order.get("order_create_time")
         ),
-        "province": str(
-            (raw_order.get("shipping_address") or {}).get("region")
-            or raw_order.get("region")
-            or ""
-        ) or None,
+        "province": _extract_province(raw_order),
     }
+
+
+def _extract_province(raw_order: Dict[str, Any]) -> Optional[str]:
+    """从 recipient_address.district_info 提取省份（TK 202309 字段结构）。"""
+    addr = raw_order.get("recipient_address") or raw_order.get("shipping_address") or {}
+    # 优先从 district_info 找 province level
+    district_info = addr.get("district_info") or []
+    for d in district_info:
+        if d.get("address_level_name") == "province":
+            return str(d.get("address_name") or "")[:32] or None
+    # fallback
+    return str(addr.get("region") or addr.get("province") or "")[:32] or None
 
 
 def map_tiktok_product(raw_product: Dict[str, Any]) -> Dict[str, Any]:
     """把 TikTok 原始商品映射为 StandardProduct 字段。"""
-    images = raw_product.get("main_images") or raw_product.get("images") or []
-    cats = raw_product.get("categories") or []
+    cats = raw_product.get("categories") or raw_product.get("recommended_categories") or []
     category_name = cats[-1].get("name") if cats and isinstance(cats[-1], dict) else (
         raw_product.get("category") or raw_product.get("category_name")
     )
+    # price 在 skus[0].price.tax_exclusive_price（TK 202309 products 结构）
+    price = 0.0
+    skus = raw_product.get("skus") or []
+    if skus and isinstance(skus[0], dict):
+        sku_price = skus[0].get("price") or {}
+        try:
+            price = float(
+                sku_price.get("tax_exclusive_price")
+                or sku_price.get("original_price")
+                or sku_price.get("price")
+                or 0
+            )
+        except (ValueError, TypeError):
+            price = 0.0
+    if price == 0:
+        try:
+            price = float(raw_product.get("price") or raw_product.get("original_price") or 0)
+        except (ValueError, TypeError):
+            price = 0.0
+
     return {
         "product_id": str(raw_product.get("product_id") or raw_product.get("id") or ""),
         "platform": Platform.TIKTOK,
@@ -352,12 +380,7 @@ def map_tiktok_product(raw_product: Dict[str, Any]) -> Dict[str, Any]:
             or ""
         )[:255],
         "category": str(category_name or "")[:64] or None,
-        "price": float(
-            raw_product.get("price")
-            or raw_product.get("original_price")
-            or (images[0].get("price") if images and isinstance(images[0], dict) else 0)
-            or 0
-        ),
+        "price": price,
         "total_gmv": 0.0,
         "total_sold": int(
             raw_product.get("sales_volume")

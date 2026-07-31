@@ -181,7 +181,8 @@ def _refresh_token() -> bool:
         data = result.get("data", {})
         new_access_token = data.get("access_token")
         new_refresh_token = data.get("refresh_token", refresh_token)
-        expires_in = int(data.get("expires_in", 86400))
+        # TK API 有时返回 expires_in=0，用默认值 86400（24h）兜底
+        expires_in = int(data.get("expires_in") or 86400)
 
         if not new_access_token:
             logger.error("Refresh response did not contain access_token")
