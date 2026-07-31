@@ -35,24 +35,44 @@ def _load_tokens_from_env():
 
 
 def _save_tokens_to_env(access_token: str, refresh_token: str, expires_at: datetime):
-    env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env")
-    
-    with open(env_path, "r", encoding="utf-8") as f:
-        content = f.read()
+    """刷新 token 后持久化。
 
-    content = _replace_env_var(content, "TK_AUTH_ACCESS_TOKEN", access_token)
-    content = _replace_env_var(content, "TK_AUTH_REFRESH_TOKEN", refresh_token)
-    content = _replace_env_var(content, "TK_TOKEN_EXPIRES_AT", expires_at.isoformat())
-
-    with open(env_path, "w", encoding="utf-8") as f:
-        f.write(content)
-
+    本地开发：写回 .env 文件，下次重启仍生效。
+    生产环境（Render 等）：.env 不存在或只读，此时只更新内存缓存 + 环境变量，
+    不抛异常（Render 的环境变量需在 Dashboard 手动更新，或依赖内存缓存到下次重启）。
+    """
+    # 先更新内存缓存（无论是否能写文件，内存里都要是最新的）
     _token_cache["access_token"] = access_token
     _token_cache["refresh_token"] = refresh_token
     _token_cache["expires_at"] = expires_at
     _token_cache["last_updated"] = datetime.now()
 
-    logger.info("Tokens saved to .env successfully")
+    # 同步到 os.environ，供同进程内 settings 读取
+    os.environ["TK_AUTH_ACCESS_TOKEN"] = access_token
+    os.environ["TK_AUTH_REFRESH_TOKEN"] = refresh_token
+    os.environ["TK_TOKEN_EXPIRES_AT"] = expires_at.isoformat()
+
+    # 尝试写回 .env 文件（本地开发用；生产环境文件不存在则跳过）
+    try:
+        env_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+            ".env",
+        )
+        with open(env_path, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        content = _replace_env_var(content, "TK_AUTH_ACCESS_TOKEN", access_token)
+        content = _replace_env_var(content, "TK_AUTH_REFRESH_TOKEN", refresh_token)
+        content = _replace_env_var(content, "TK_TOKEN_EXPIRES_AT", expires_at.isoformat())
+
+        with open(env_path, "w", encoding="utf-8") as f:
+            f.write(content)
+
+        logger.info("Tokens saved to .env successfully")
+    except FileNotFoundError:
+        logger.info("Tokens updated in memory only (.env not present, likely production env)")
+    except OSError as e:
+        logger.warning(f"Tokens updated in memory only (.env write failed: {e})")
 
 
 def _replace_env_var(content: str, key: str, value: str) -> str:
