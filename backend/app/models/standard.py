@@ -47,6 +47,18 @@ class OrderStatus(str, enum.Enum):
     REFUNDED = "refunded"
 
 
+# 统一用 VARCHAR + CHECK 约束，避免 PostgreSQL 原生 enum 类型不可变
+# （新增枚举值时无需 ALTER TYPE，create_all 即可生效）
+_platform_enum = SAEnum(
+    Platform, native_enum=False, length=32,
+    values_callable=lambda x: [e.value for e in x],
+)
+_status_enum = SAEnum(
+    OrderStatus, native_enum=False, length=32,
+    values_callable=lambda x: [e.value for e in x],
+)
+
+
 # =========================================================================
 # 一、SQLAlchemy ORM —— 物理表（AI 工具在此做数据库层聚合）
 # =========================================================================
@@ -57,7 +69,7 @@ class StandardProduct(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     product_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    platform: Mapped[Platform] = mapped_column(SAEnum(Platform), nullable=False, default=Platform.MANUAL)
+    platform: Mapped[Platform] = mapped_column(_platform_enum, nullable=False, default=Platform.MANUAL)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     category: Mapped[str | None] = mapped_column(String(64), nullable=True)
     price: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
@@ -87,7 +99,7 @@ class StandardOrder(Base):
     quantity: Mapped[int] = mapped_column(Integer, default=1)
     customer_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     creator_id: Mapped[str | None] = mapped_column(String(64), nullable=True)  # 带货达人
-    status: Mapped[OrderStatus] = mapped_column(SAEnum(OrderStatus), default=OrderStatus.PAID)
+    status: Mapped[OrderStatus] = mapped_column(_status_enum, default=OrderStatus.PAID)
     paid_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     province: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
@@ -108,7 +120,7 @@ class StandardInfluencer(Base):
     __tablename__ = "standard_influencers"
 
     creator_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    platform: Mapped[Platform] = mapped_column(SAEnum(Platform), nullable=False, default=Platform.MANUAL)
+    platform: Mapped[Platform] = mapped_column(_platform_enum, nullable=False, default=Platform.MANUAL)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     category: Mapped[str | None] = mapped_column(String(64), nullable=True)
     followers: Mapped[int] = mapped_column(Integer, default=0)

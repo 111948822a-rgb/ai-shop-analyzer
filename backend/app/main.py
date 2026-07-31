@@ -23,6 +23,29 @@ import app.models.standard  # noqa: F401  确保 MiaodaAnalysis 等表被注册�
 async def lifespan(app: FastAPI):
     # 生产建议用 Alembic；开发期自动建表
     from app.db import Base, engine
+    from sqlalchemy import text
+
+    # 迁移：旧的 standard_orders/platform 是 PostgreSQL 原生 enum 类型，
+    # 新增 TIKTOK 枚举值时无法自动 ALTER TYPE，改为 VARCHAR + CHECK。
+    # 检测到旧 enum 列时，DROP 相关表和类型，让下面的 create_all 用新结构重建。
+    if engine.dialect.name == "postgresql":
+        try:
+            with engine.connect() as conn:
+                row = conn.execute(text(
+                    "SELECT data_type FROM information_schema.columns "
+                    "WHERE table_name = 'standard_orders' AND column_name = 'platform'"
+                )).fetchone()
+                if row and row[0] == "USER-DEFINED":
+                    print("[migrate] 检测到旧 PG enum 列，重建 standard 表为 VARCHAR 结构...")
+                    conn.execute(text("DROP TABLE IF EXISTS standard_orders CASCADE"))
+                    conn.execute(text("DROP TABLE IF EXISTS standard_products CASCADE"))
+                    conn.execute(text("DROP TABLE IF EXISTS standard_influencers CASCADE"))
+                    conn.execute(text("DROP TYPE IF EXISTS platform"))
+                    conn.execute(text("DROP TYPE IF EXISTS orderstatus"))
+                    conn.commit()
+                    print("[migrate] 旧表已删除，将由 create_all 重建")
+        except Exception as e:
+            print(f"[migrate] 迁移检查跳过: {e}")
 
     Base.metadata.create_all(bind=engine)
     yield
