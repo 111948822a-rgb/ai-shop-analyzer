@@ -222,3 +222,24 @@ class MiaodaAnalysis(Base):
     )
 
     __table_args__ = (Index("ix_miaoda_status", "status"),)
+
+
+# =========================================================================
+# 四、第三方平台 OAuth Token 持久化
+# 解决 OAuth2 refresh_token 轮换问题：刷新后新 token 必须持久化，
+# 否则服务重启后回到旧环境变量（已失效）→ 刷新失败 → 需手动改环境变量。
+# 存数据库后，重启自动恢复，永不需要手动维护 token。
+# =========================================================================
+class PlatformToken(Base):
+    """第三方平台 OAuth token 存储（按 platform 唯一，单行）。"""
+
+    __tablename__ = "platform_tokens"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    platform: Mapped[str] = mapped_column(String(32), nullable=False, unique=True)
+    access_token: Mapped[str] = mapped_column(Text, nullable=False)
+    refresh_token: Mapped[str] = mapped_column(Text, nullable=False)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )

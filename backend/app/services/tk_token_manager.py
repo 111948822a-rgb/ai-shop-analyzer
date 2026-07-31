@@ -21,9 +21,60 @@ _token_cache = {
 }
 
 REFRESH_THRESHOLD_MINUTES = 60
+_PLATFORM_KEY = "tiktok"
+
+
+# ----------------------------- 数据库持久化 -----------------------------
+def _load_tokens_from_db() -> bool:
+    """从数据库加载 token。成功返回 True。"""
+    try:
+        from app.db import SessionLocal
+        from app.models.standard import PlatformToken
+        db = SessionLocal()
+        try:
+            row = db.query(PlatformToken).filter(PlatformToken.platform == _PLATFORM_KEY).first()
+            if row and row.access_token and row.refresh_token:
+                _token_cache["access_token"] = row.access_token
+                _token_cache["refresh_token"] = row.refresh_token
+                _token_cache["expires_at"] = row.expires_at
+                logger.info("Tokens loaded from database")
+                return True
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning(f"Load tokens from DB failed: {e}")
+    return False
+
+
+def _save_tokens_to_db(access_token: str, refresh_token: str, expires_at: datetime):
+    """把 token 写入数据库（upsert）。生产环境持久化的关键。"""
+    try:
+        from app.db import SessionLocal
+        from app.models.standard import PlatformToken
+        db = SessionLocal()
+        try:
+            row = db.query(PlatformToken).filter(PlatformToken.platform == _PLATFORM_KEY).first()
+            if row:
+                row.access_token = access_token
+                row.refresh_token = refresh_token
+                row.expires_at = expires_at
+            else:
+                db.add(PlatformToken(
+                    platform=_PLATFORM_KEY,
+                    access_token=access_token,
+                    refresh_token=refresh_token,
+                    expires_at=expires_at,
+                ))
+            db.commit()
+            logger.info("Tokens saved to database")
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning(f"Save tokens to DB failed: {e}")
 
 
 def _load_tokens_from_env():
+    """从环境变量加载（首次引导用）。"""
     _token_cache["access_token"] = settings.TK_AUTH_ACCESS_TOKEN
     _token_cache["refresh_token"] = settings.TK_AUTH_REFRESH_TOKEN
     if settings.TK_TOKEN_EXPIRES_AT:
@@ -34,25 +85,44 @@ def _load_tokens_from_env():
             _token_cache["expires_at"] = None
 
 
-def _save_tokens_to_env(access_token: str, refresh_token: str, expires_at: datetime):
-    """刷新 token 后持久化。
+def _load_tokens():
+    """加载 token：优先数据库，没有则用环境变量（首次引导）。
 
-    本地开发：写回 .env 文件，下次重启仍生效。
-    生产环境（Render 等）：.env 不存在或只读，此时只更新内存缓存 + 环境变量，
-    不抛异常（Render 的环境变量需在 Dashboard 手动更新，或依赖内存缓存到下次重启）。
+    这是一劳永逸的关键：
+    - 首次启动：环境变量有 token → 加载并写入数据库
+    - 之后重启：数据库有 token → 直接用，不再依赖环境变量
+    - 刷新后：新 token 写数据库 → 重启后从数据库恢复，永不需要手动改环境变量
     """
-    # 先更新内存缓存（无论是否能写文件，内存里都要是最新的）
+    if _load_tokens_from_db():
+        return
+    # 数据库没有，从环境变量加载（首次引导）
+    _load_tokens_from_env()
+    # 如果环境变量有 token，立即写入数据库，以后就不用依赖环境变量了
+    if _token_cache["access_token"] and _token_cache["refresh_token"]:
+        _save_tokens_to_db(
+            _token_cache["access_token"],
+            _token_cache["refresh_token"],
+            _token_cache["expires_at"] or (datetime.now() + timedelta(hours=24)),
+        )
+
+
+def _save_tokens(access_token: str, refresh_token: str, expires_at: datetime):
+    """刷新后持久化：内存缓存 + 数据库 + 环境变量 + .env(本地)。"""
+    # 1. 内存缓存（无论什么环境都要更新）
     _token_cache["access_token"] = access_token
     _token_cache["refresh_token"] = refresh_token
     _token_cache["expires_at"] = expires_at
     _token_cache["last_updated"] = datetime.now()
 
-    # 同步到 os.environ，供同进程内 settings 读取
+    # 2. 数据库（生产环境持久化的关键，重启后从这里恢复）
+    _save_tokens_to_db(access_token, refresh_token, expires_at)
+
+    # 3. os.environ（同进程内 settings 读取）
     os.environ["TK_AUTH_ACCESS_TOKEN"] = access_token
     os.environ["TK_AUTH_REFRESH_TOKEN"] = refresh_token
     os.environ["TK_TOKEN_EXPIRES_AT"] = expires_at.isoformat()
 
-    # 尝试写回 .env 文件（本地开发用；生产环境文件不存在则跳过）
+    # 4. .env 文件（本地开发用；生产环境文件不存在则跳过）
     try:
         env_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
@@ -60,19 +130,16 @@ def _save_tokens_to_env(access_token: str, refresh_token: str, expires_at: datet
         )
         with open(env_path, "r", encoding="utf-8") as f:
             content = f.read()
-
         content = _replace_env_var(content, "TK_AUTH_ACCESS_TOKEN", access_token)
         content = _replace_env_var(content, "TK_AUTH_REFRESH_TOKEN", refresh_token)
         content = _replace_env_var(content, "TK_TOKEN_EXPIRES_AT", expires_at.isoformat())
-
         with open(env_path, "w", encoding="utf-8") as f:
             f.write(content)
-
         logger.info("Tokens saved to .env successfully")
     except FileNotFoundError:
-        logger.info("Tokens updated in memory only (.env not present, likely production env)")
+        logger.info("Tokens saved to DB only (.env not present, production env)")
     except OSError as e:
-        logger.warning(f"Tokens updated in memory only (.env write failed: {e})")
+        logger.warning(f"Tokens saved to DB only (.env write failed: {e})")
 
 
 def _replace_env_var(content: str, key: str, value: str) -> str:
@@ -134,7 +201,7 @@ def exchange_auth_code(auth_code: str) -> bool:
 
         expires_at = datetime.now() + timedelta(seconds=expires_in)
         
-        _save_tokens_to_env(access_token, refresh_token, expires_at)
+        _save_tokens(access_token, refresh_token, expires_at)
         
         logger.info(f"Auth code exchange successful. Token expires at: {expires_at}")
         return True
@@ -190,7 +257,7 @@ def _refresh_token() -> bool:
 
         expires_at = datetime.now() + timedelta(seconds=expires_in)
         
-        _save_tokens_to_env(new_access_token, new_refresh_token, expires_at)
+        _save_tokens(new_access_token, new_refresh_token, expires_at)
         
         logger.info(f"Token refresh successful. New token expires at: {expires_at}")
         return True
@@ -207,7 +274,7 @@ def _refresh_token() -> bool:
 
 def get_access_token(force_refresh: bool = False) -> Optional[str]:
     if _token_cache["access_token"] is None:
-        _load_tokens_from_env()
+        _load_tokens()
 
     if force_refresh or not _token_cache["access_token"] or _is_token_expiring_soon():
         if not _refresh_token():
@@ -221,25 +288,25 @@ def get_access_token(force_refresh: bool = False) -> Optional[str]:
 
 def get_refresh_token() -> Optional[str]:
     if _token_cache["refresh_token"] is None:
-        _load_tokens_from_env()
+        _load_tokens()
     return _token_cache["refresh_token"]
 
 
 def get_token_expires_at() -> Optional[datetime]:
     if _token_cache["expires_at"] is None:
-        _load_tokens_from_env()
+        _load_tokens()
     return _token_cache["expires_at"]
 
 
 def set_initial_tokens(access_token: str, refresh_token: str, expires_in_seconds: int = 86400):
     expires_at = datetime.now() + timedelta(seconds=expires_in_seconds)
-    _save_tokens_to_env(access_token, refresh_token, expires_at)
+    _save_tokens(access_token, refresh_token, expires_at)
     logger.info(f"Initial tokens set. Expires at: {expires_at}")
 
 
 def get_token_status() -> Dict[str, Any]:
     if _token_cache["access_token"] is None:
-        _load_tokens_from_env()
+        _load_tokens()
     
     now = datetime.now()
     expires_at = _token_cache["expires_at"]
