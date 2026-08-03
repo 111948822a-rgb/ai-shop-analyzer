@@ -111,8 +111,9 @@ export interface Kpi {
 }
 
 export interface DashboardOverview {
-  period: { start: string; end: string; days: number; fallback?: boolean };
+  period: { start: string; end: string; days: number };
   previous_period: { start: string; end: string };
+  data_range?: { earliest: string | null; latest: string | null };
   kpis: Kpi[];
 }
 

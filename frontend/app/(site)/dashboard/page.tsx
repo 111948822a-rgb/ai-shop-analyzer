@@ -91,12 +91,15 @@ export default function DashboardPage() {
   };
 
   const kpis = overview?.kpis ?? [];
-  const fallback = overview?.period.fallback;
+  const dataRange = overview?.data_range;
   const trendData = trend.map((p) => ({
     date: p.date.slice(5),
     gmv: Math.round(p.gmv * 100) / 100,
     orders: 0,
   }));
+
+  // 当前窗口内是否有数据
+  const hasData = kpis.some((k) => k.value > 0);
 
   // 流量来源（暂无数据，显示占位）
   const trafficData = [
@@ -116,15 +119,18 @@ export default function DashboardPage() {
           <h1 className="ds-title">数据概览</h1>
           <p className="ds-caption mt-0.5">
             {overview
-              ? `统计区间 ${overview.period.start} ~ ${overview.period.end}${
-                  fallback ? "（近N天无数据，已显示全部已同步数据）" : `（近 ${overview.period.days} 天）`
-                }`
+              ? `统计区间 ${overview.period.start} ~ ${overview.period.end}（近 ${overview.period.days} 天）`
               : "加载中…"}
+            {dataRange?.earliest && !hasData && (
+              <span className="text-warning-600">
+                {" "}· 该时间段暂无订单数据，已同步数据范围：{dataRange.earliest} ~ {dataRange.latest}，请扩大时间范围
+              </span>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-2">
           {/* 时间范围 */}
-          <div className="flex rounded-btn border border-gray-200 bg-white p-0.5">
+          <div className="flex rounded-[8px] border border-gray-200 bg-white p-0.5">
             {[
               { d: 7, l: "近7天" },
               { d: 30, l: "近30天" },
