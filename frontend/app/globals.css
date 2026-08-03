@@ -4,41 +4,95 @@
 
 @layer base {
   body {
-    @apply text-slate-100 antialiased;
+    @apply bg-gray-50 text-gray-900 antialiased;
   }
 }
 
 @layer components {
+  /* ===== 设计规范：卡片 ===== */
+  .ds-card {
+    @apply rounded-[12px] border border-gray-200 bg-white shadow-sm transition-all duration-200;
+  }
+  .ds-card-hover {
+    @apply ds-card hover:-translate-y-0.5 hover:shadow-md;
+  }
+
+  /* ===== 设计规范：按钮 ===== */
+  .ds-btn {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-[8px] px-4 py-2 text-sm font-medium transition-colors duration-200;
+  }
+  .ds-btn-primary {
+    @apply ds-btn bg-primary-600 text-white hover:bg-primary-700;
+  }
+  .ds-btn-secondary {
+    @apply ds-btn border border-gray-300 bg-white text-gray-700 hover:bg-gray-50;
+  }
+  .ds-btn-ghost {
+    @apply ds-btn text-gray-500 hover:bg-gray-100 hover:text-gray-800;
+  }
+
+  /* ===== 设计规范：数据标签 ===== */
+  .ds-tag {
+    @apply inline-flex items-center rounded-[4px] px-2 py-0.5 text-xs font-medium;
+  }
+  .ds-tag-up {
+    @apply ds-tag bg-growth-50 text-growth-600;
+  }
+  .ds-tag-down {
+    @apply ds-tag bg-decline-50 text-decline-600;
+  }
+
+  /* ===== 文字层级 ===== */
+  .ds-title {
+    @apply text-lg font-bold text-gray-900;
+  }
+  .ds-subtitle {
+    @apply text-sm font-normal text-gray-600;
+  }
+  .ds-body {
+    @apply text-[13px] font-normal text-gray-700;
+  }
+  .ds-caption {
+    @apply text-xs text-gray-400;
+  }
+
+  /* ===== 骨架屏 ===== */
+  .ds-skeleton {
+    @apply animate-pulse rounded bg-gray-200;
+  }
+
+  /* ===== 空状态 ===== */
+  .ds-empty {
+    @apply flex flex-col items-center justify-center py-12 text-center;
+  }
+
+  /* ===== 暗色玻璃卡片（首页/大屏保留） ===== */
   .glass-card {
     @apply bg-slate-800/50 backdrop-blur-lg border border-slate-700/50 rounded-xl;
   }
-
   .glass-card-hover {
     @apply glass-card transition-all duration-300 hover:border-primary-500/50 hover:shadow-lg hover:shadow-primary-500/10;
   }
-
-  .btn-primary {
-    @apply px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors duration-200 font-medium;
+  .gradient-text {
+    background: linear-gradient(90deg, #60a5fa, #a78bfa, #60a5fa);
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: gradient-shift 3s linear infinite;
   }
 
-  .btn-secondary {
-    @apply px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors duration-200 font-medium;
+  /* ===== 大屏专用 ===== */
+  .screen-card {
+    @apply rounded-[12px] border border-screen-card bg-screen-card/80 backdrop-blur;
+  }
+  .screen-number {
+    @apply text-3xl font-bold tabular-nums;
   }
 
-  .status-pending {
-    @apply px-2 py-1 bg-yellow-500/20 text-yellow-400 text-xs rounded-full font-medium;
-  }
-
-  .status-processing {
-    @apply px-2 py-1 bg-blue-500/20 text-blue-400 text-xs rounded-full font-medium;
-  }
-
-  .status-completed {
-    @apply px-2 py-1 bg-green-500/20 text-green-400 text-xs rounded-full font-medium;
-  }
-
-  .status-failed {
-    @apply px-2 py-1 bg-red-500/20 text-red-400 text-xs rounded-full font-medium;
+  /* ===== 跑马灯 ===== */
+  .marquee-track {
+    @apply flex whitespace-nowrap animate-marquee;
   }
 }
 
@@ -48,11 +102,8 @@
   100% { background-position: 0% 50%; }
 }
 
-.gradient-text {
-  background: linear-gradient(90deg, #60a5fa, #a78bfa, #60a5fa);
-  background-size: 200% auto;
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  animation: gradient-shift 3s linear infinite;
-}
+/* 滚动条美化 */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }

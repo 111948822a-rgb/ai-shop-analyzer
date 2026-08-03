@@ -332,6 +332,8 @@ export async function generatePeriodReport(
 export interface TikTokStatus {
   configured: boolean;
   shop_id: string | null;
+  shop_name?: string | null;
+  last_sync?: string | null;
   token: {
     has_access_token: boolean;
     has_refresh_token: boolean;
