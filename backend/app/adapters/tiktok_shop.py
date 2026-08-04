@@ -171,37 +171,64 @@ class TikTokShopPartnerAPI:
     def fetch_orders(
         self, start_date: Optional[str] = None, end_date: Optional[str] = None
     ) -> List[Dict]:
+        """拉取订单列表。
+
+        关键：TikTok 202309 orders/search 接口分页必须用 **page_token** 参数
+        （不是 next_page_token）。API 返回的翻页游标字段名叫 next_page_token，
+        但请求时传给 API 的参数名是 page_token。用 next_page_token 请求会被
+        API 静默忽略，每次都返回第一页。
+
+        另外，create_time_from/to 时间过滤参数对该接口也不生效（API 会忽略
+        时间条件，按 create_time 升序返回全部订单），所以这里不再传时间参数，
+        而是拉全量后在 Python 侧按 start_date/end_date 过滤。
+        """
         if start_date is None:
             start_date = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
         if end_date is None:
             end_date = datetime.now().strftime("%Y-%m-%d")
-
-        # TikTok 时间戳为秒级
         t_from = int(datetime.strptime(start_date, "%Y-%m-%d").timestamp())
         t_to = int(datetime.strptime(end_date, "%Y-%m-%d").timestamp()) + 86399
 
         all_orders: List[Dict] = []
-        page_no = 1
         page_size = 100
-        while True:
-            data = {
-                "page_no": page_no,
-                "page_size": page_size,
-                "create_time_from": t_from,
-                "create_time_to": t_to,
-            }
+        page_token: Optional[str] = None
+        page_no = 1
+        max_pages = 500  # 安全上限：500 页 = 50000 单
+        while page_no <= max_pages:
+            data: Dict[str, Any] = {"page_size": page_size}
+            if page_token:
+                # 关键：用 page_token 而非 next_page_token
+                data["page_token"] = page_token
+            else:
+                data["page_no"] = 1
             result = self._make_request("POST", "/order/202309/orders/search", data)
             if not result:
                 break
             orders = result.get("orders", [])
-            # 注意: TK API 的 total 不可靠（常返回 0 但实际有数据），
-            # 不能用 len(all_orders) >= total 判断是否拉完。
-            # 改为：返回空或不足一页时停止。
-            logger.info(f"Fetched page {page_no}: {len(orders)} orders")
-            all_orders.extend(orders)
-            if not orders or len(orders) < page_size:
+            # API 返回的游标字段名是 next_page_token
+            page_token = result.get("next_page_token")
+            logger.info(
+                f"Fetched page {page_no}: {len(orders)} orders, page_token={'yes' if page_token else 'no'}"
+            )
+            # 本地按时间过滤（API 时间过滤不生效）
+            for o in orders:
+                ct = o.get("create_time") or o.get("paid_time")
+                if ct:
+                    ts = int(ct)
+                    if ts > 1_000_000_000_000:
+                        ts //= 1000
+                    if t_from <= ts <= t_to:
+                        all_orders.append(o)
+                else:
+                    all_orders.append(o)
+            # 停止条件：无下一页 token 或本页为空
+            if not page_token or not orders:
                 break
             page_no += 1
+        logger.info(
+            f"fetch_orders done: pages={page_no}, matched={len(all_orders)} "
+            f"(filter {start_date} ~ {end_date})"
+        )
         return all_orders
 
     def fetch_order_detail(self, order_id: str) -> Dict:
@@ -210,18 +237,28 @@ class TikTokShopPartnerAPI:
         return self._make_request("POST", "/order/202309/orders/detail", data)
 
     def fetch_products(self) -> List[Dict]:
+        """拉取商品列表。与 fetch_orders 同理，分页用 page_token。"""
         all_products: List[Dict] = []
-        page_no = 1
         page_size = 100
-        while True:
-            data = {"page_no": page_no, "page_size": page_size}
+        page_token: Optional[str] = None
+        page_no = 1
+        max_pages = 500
+        while page_no <= max_pages:
+            data: Dict[str, Any] = {"page_size": page_size}
+            if page_token:
+                data["page_token"] = page_token
+            else:
+                data["page_no"] = 1
             result = self._make_request("POST", "/product/202309/products/search", data)
             if not result:
                 break
             products = result.get("products", [])
-            logger.info(f"Fetched page {page_no}: {len(products)} products")
+            page_token = result.get("next_page_token")
+            logger.info(
+                f"Fetched products page {page_no}: {len(products)} items, token={'yes' if page_token else 'no'}"
+            )
             all_products.extend(products)
-            if not products or len(products) < page_size:
+            if not page_token or not products:
                 break
             page_no += 1
         return all_products
