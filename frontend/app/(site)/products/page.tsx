@@ -5,6 +5,9 @@ import {
   Bar,
   BarChart,
   Cell,
+  Legend,
+  Pie,
+  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -29,10 +32,18 @@ const TIME_FILTERS: { label: string; days: number }[] = [
 
 // ===== 价格带分桶 =====
 const PRICE_BANDS = [
-  { key: "0-10", label: "$0-10", min: 0, max: 10 },
-  { key: "10-20", label: "$10-20", min: 10, max: 20 },
-  { key: "20-50", label: "$20-50", min: 20, max: 50 },
-  { key: "50+", label: "$50+", min: 50, max: Infinity },
+  { key: "0-10", label: "฿0-10", min: 0, max: 10 },
+  { key: "10-20", label: "฿10-20", min: 10, max: 20 },
+  { key: "20-50", label: "฿20-50", min: 20, max: 50 },
+  { key: "50+", label: "฿50+", min: 50, max: Infinity },
+];
+
+// ===== 商品价格带分布分档（按客单价）=====
+const PRICE_DISTRIBUTION_BANDS = [
+  { key: "0-500", label: "฿0-500", min: 0, max: 500 },
+  { key: "500-1000", label: "฿500-1000", min: 500, max: 1000 },
+  { key: "1000-2000", label: "฿1000-2000", min: 1000, max: 2000 },
+  { key: "2000+", label: "฿2000+", min: 2000, max: Infinity },
 ];
 
 const PRICE_FILTERS = [
@@ -43,7 +54,7 @@ const PRICE_FILTERS = [
 // ===== 工具函数 =====
 function fmtCurrency(n: number | null | undefined): string {
   if (n == null || Number.isNaN(n) || n === 0) return "-";
-  return "$" + Math.round(n).toLocaleString("en-US");
+  return "฿" + Math.round(n).toLocaleString("en-US");
 }
 
 function fmtInt(n: number | null | undefined): string {
@@ -71,7 +82,7 @@ async function fetchTopProducts(limit: number, days: number): Promise<TopProduct
 }
 
 // ===== 排序类型 =====
-type SortKey = "product" | "orders" | "gmv";
+type SortKey = "product" | "orders" | "gmv" | "price";
 type SortDir = "asc" | "desc";
 
 export default function ProductsPage() {
@@ -117,32 +128,35 @@ export default function ProductsPage() {
     return { total, sold, sellThrough, hot };
   }, [products, days]);
 
-  // ===== 含估算客单价的商品列表 =====
+  // ===== 含客单价的商品列表（优先使用后端 price，缺失时回退到 GMV/订单 估算）=====
   const pricedProducts = useMemo(() => {
     return products.map((p) => ({
       ...p,
-      price: p.orders > 0 ? p.gmv / p.orders : 0,
+      price: p.price ?? (p.orders > 0 ? p.gmv / p.orders : 0),
     }));
   }, [products]);
 
   // ===== 5.2 表格数据（筛选 + 排序）=====
   const tableData = useMemo(() => {
     let list = [...pricedProducts];
-    // 价格区间筛选（按估算客单价）
+    // 价格区间筛选（按客单价）
     if (priceFilter) {
       const band = PRICE_BANDS.find((b) => b.key === priceFilter);
       if (band) {
         list = list.filter((p) => p.price >= band.min && p.price < band.max);
       }
     }
-    // 分类筛选：TopProduct 无品类字段，"all" 时不过滤
-    void categoryFilter;
+    // 分类筛选：按 category 字段过滤，"all" 时不过滤
+    if (categoryFilter !== "all") {
+      list = list.filter((p) => (p.category || "未分类") === categoryFilter);
+    }
     // 排序
     list.sort((a, b) => {
       let cmp = 0;
       if (sortKey === "product") cmp = a.product.localeCompare(b.product);
       else if (sortKey === "orders") cmp = a.orders - b.orders;
       else if (sortKey === "gmv") cmp = a.gmv - b.gmv;
+      else if (sortKey === "price") cmp = a.price - b.price;
       return sortDir === "asc" ? cmp : -cmp;
     });
     return list;
@@ -184,6 +198,54 @@ export default function ProductsPage() {
     );
   }, [priceBandData, priceMetric]);
 
+  // ===== 5.3 品类列表（用于筛选下拉框）=====
+  const categories = useMemo(() => {
+    const set = new Set<string>();
+    products.forEach((p) => {
+      set.add(p.category || "未分类");
+    });
+    return Array.from(set).sort();
+  }, [products]);
+
+  // ===== 5.3 品类销售占比（按 category 聚合 GMV）=====
+  const categoryData = useMemo(() => {
+    const map = new Map<string, number>();
+    products.forEach((p) => {
+      const cat = p.category || "未分类";
+      map.set(cat, (map.get(cat) ?? 0) + p.gmv);
+    });
+    return Array.from(map, ([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+  }, [products]);
+
+  const categoryTotal = useMemo(
+    () => categoryData.reduce((s, d) => s + d.value, 0),
+    [categoryData]
+  );
+
+  // ===== 5.5 商品价格带分布（按 price 字段分档统计商品数量）=====
+  const priceDistributionData = useMemo(() => {
+    const buckets = PRICE_DISTRIBUTION_BANDS.map((b) => ({
+      label: b.label,
+      count: 0,
+    }));
+    pricedProducts.forEach((p) => {
+      const idx = PRICE_DISTRIBUTION_BANDS.findIndex(
+        (b) => p.price >= b.min && p.price < b.max
+      );
+      if (idx >= 0) buckets[idx].count += 1;
+    });
+    return buckets;
+  }, [pricedProducts]);
+
+  const mainDistBand = useMemo(() => {
+    if (!priceDistributionData.length) return null;
+    return priceDistributionData.reduce(
+      (max, cur) => (cur.count > max.count ? cur : max),
+      priceDistributionData[0]
+    );
+  }, [priceDistributionData]);
+
   // ===== 导出 JSON =====
   function handleExport() {
     const payload = {
@@ -194,6 +256,8 @@ export default function ProductsPage() {
       products: pricedProducts,
       table: tableData,
       price_band: priceBandData,
+      category_distribution: categoryData,
+      price_distribution: priceDistributionData,
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], {
       type: "application/json",
@@ -209,7 +273,13 @@ export default function ProductsPage() {
   }
 
   const sortLabel =
-    sortKey === "product" ? "商品名称" : sortKey === "orders" ? "销量" : "GMV";
+    sortKey === "product"
+      ? "商品名称"
+      : sortKey === "orders"
+        ? "销量"
+        : sortKey === "price"
+          ? "客单价"
+          : "GMV";
 
   return (
     <div className="space-y-6">
@@ -297,7 +367,7 @@ export default function ProductsPage() {
             <div>
               <h2 className="ds-title">商品销售明细</h2>
               <p className="ds-subtitle mt-1">
-                点击列头排序 · 曝光/点击/加购/库存等暂无字段显示 "-"
+                点击列头排序 · 按品类与客单价分析销售明细
               </p>
             </div>
             <button onClick={handleExport} className="ds-btn-secondary">
@@ -313,6 +383,11 @@ export default function ProductsPage() {
               className="rounded-btn border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-700 outline-none focus:border-primary-400"
             >
               <option value="all">全部分类</option>
+              {categories.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
             </select>
             <select
               value={priceFilter}
@@ -351,11 +426,7 @@ export default function ProductsPage() {
                     >
                       商品名称
                     </Th>
-                    <th className="px-3 py-2 text-right">SKU数</th>
-                    <th className="px-3 py-2 text-right">曝光量</th>
-                    <th className="px-3 py-2 text-right">点击量</th>
-                    <th className="px-3 py-2 text-right">点击率</th>
-                    <th className="px-3 py-2 text-right">加购数</th>
+                    <th className="px-3 py-2 text-left">品类</th>
                     <Th
                       onClick={() => toggleSort("orders")}
                       active={sortKey === "orders"}
@@ -372,8 +443,14 @@ export default function ProductsPage() {
                     >
                       GMV
                     </Th>
-                    <th className="px-3 py-2 text-right">转化率</th>
-                    <th className="px-3 py-2 text-right">库存</th>
+                    <Th
+                      onClick={() => toggleSort("price")}
+                      active={sortKey === "price"}
+                      dir={sortDir}
+                      align="right"
+                    >
+                      客单价
+                    </Th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -385,19 +462,18 @@ export default function ProductsPage() {
                       >
                         {p.product}
                       </td>
-                      <td className="px-3 py-2 text-right text-gray-400">-</td>
-                      <td className="px-3 py-2 text-right text-gray-400">-</td>
-                      <td className="px-3 py-2 text-right text-gray-400">-</td>
-                      <td className="px-3 py-2 text-right text-gray-400">-</td>
-                      <td className="px-3 py-2 text-right text-gray-400">-</td>
+                      <td className="px-3 py-2 text-gray-700">
+                        {p.category || "未分类"}
+                      </td>
                       <td className="px-3 py-2 text-right tabular-nums text-gray-900">
                         {fmtInt(p.orders)}
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums text-gray-900">
                         {fmtCurrency(p.gmv)}
                       </td>
-                      <td className="px-3 py-2 text-right text-gray-400">-</td>
-                      <td className="px-3 py-2 text-right text-gray-400">-</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-gray-900">
+                        {fmtCurrency(p.price)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -421,16 +497,67 @@ export default function ProductsPage() {
         <section className="ds-card p-5">
           <div>
             <h2 className="ds-title">品类销售占比</h2>
-            <p className="ds-subtitle mt-1">按一级品类划分 GMV 占比</p>
+            <p className="ds-subtitle mt-1">按品类划分 GMV 占比</p>
           </div>
           <div className="mt-4">
-            <div className="ds-empty">
-              <p className="ds-body">暂无品类数据</p>
-              <p className="ds-caption mt-1">
-                TopProduct 接口未返回品类字段，需对接商品分类接口
-              </p>
-            </div>
+            {loading ? (
+              <div className="ds-skeleton h-[280px] w-full" />
+            ) : categoryData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={280}>
+                <PieChart>
+                  <Pie
+                    data={categoryData}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={90}
+                    innerRadius={45}
+                    paddingAngle={2}
+                  >
+                    {categoryData.map((_, i) => (
+                      <Cell
+                        key={i}
+                        fill={CHART_COLORS[i % CHART_COLORS.length]}
+                      />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    formatter={(v: number, n: string) => [
+                      `${fmtCurrency(v)}${
+                        categoryTotal > 0
+                          ? ` (${((v / categoryTotal) * 100).toFixed(1)}%)`
+                          : ""
+                      }`,
+                      n,
+                    ]}
+                    contentStyle={{
+                      borderRadius: 8,
+                      border: "1px solid #e5e7eb",
+                      fontSize: 12,
+                    }}
+                  />
+                  <Legend
+                    wrapperStyle={{ fontSize: 12 }}
+                    iconType="circle"
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="ds-empty">
+                <p className="ds-body">暂无品类数据</p>
+              </div>
+            )}
           </div>
+          {categoryData.length > 0 && categoryTotal > 0 && (
+            <p className="ds-body mt-3">
+              品类数：
+              <span className="font-semibold text-primary-600">
+                {categoryData.length}
+              </span>
+              ，总 GMV {fmtCurrency(categoryTotal)}
+            </p>
+          )}
         </section>
       </div>
 
@@ -484,7 +611,7 @@ export default function ProductsPage() {
                     tick={{ fontSize: 12, fill: "#94a3b8" }}
                     tickFormatter={(v: number) =>
                       priceMetric === "gmv"
-                        ? "$" + Math.round(v / 1000) + "k"
+                        ? "฿" + Math.round(v / 1000) + "k"
                         : Math.round(v).toLocaleString("en-US")
                     }
                     width={56}
@@ -536,39 +663,70 @@ export default function ProductsPage() {
           )}
         </section>
 
-        {/* 5.5 库存预警商品 */}
+        {/* 5.5 商品价格带分布（原库存预警位） */}
         <section className="ds-card p-5">
           <div>
-            <h2 className="ds-title">库存预警商品</h2>
+            <h2 className="ds-title">商品价格带分布</h2>
             <p className="ds-subtitle mt-1">
-              红色预警 &lt; 10 件 · 黄色预警 &lt; 30 件 · 按紧急程度排序
+              按客单价分档统计商品数量
             </p>
           </div>
           <div className="mt-4">
-            <div className="ds-empty">
-              <p className="ds-body">暂无库存数据，需对接库存接口</p>
-              <p className="ds-caption mt-1">
-                TopProduct 接口未返回库存与近7日销量字段
-              </p>
-            </div>
+            {loading ? (
+              <div className="ds-skeleton h-[280px] w-full" />
+            ) : priceDistributionData.some((d) => d.count > 0) ? (
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart
+                  data={priceDistributionData}
+                  margin={{ top: 8, right: 16, left: 8, bottom: 0 }}
+                >
+                  <XAxis
+                    dataKey="label"
+                    tick={{ fontSize: 12, fill: "#94a3b8" }}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 12, fill: "#94a3b8" }}
+                    allowDecimals={false}
+                    width={40}
+                  />
+                  <Tooltip
+                    formatter={(v: number) => [`${v} 个商品`, "商品数量"]}
+                    contentStyle={{
+                      borderRadius: 8,
+                      border: "1px solid #e5e7eb",
+                      fontSize: 12,
+                    }}
+                  />
+                  <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                    {priceDistributionData.map((d) => (
+                      <Cell
+                        key={d.label}
+                        fill={
+                          mainDistBand && d.label === mainDistBand.label
+                            ? COLOR_GROWTH
+                            : COLOR_PRIMARY
+                        }
+                      />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="ds-empty">
+                <p className="ds-body">暂无价格数据</p>
+                <p className="ds-caption mt-1">需商品带有客单价字段</p>
+              </div>
+            )}
           </div>
-          {/* 图例（仅用于说明预警分级，对接库存后启用） */}
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <span className="ds-tag bg-decline-50 text-decline-600">
-              <span
-                aria-hidden
-                className="mr-1 inline-block h-2 w-2 rounded-full bg-decline-500"
-              />
-              红色预警 &lt; 10
-            </span>
-            <span className="ds-tag bg-warning-50 text-warning-600">
-              <span
-                aria-hidden
-                className="mr-1 inline-block h-2 w-2 rounded-full bg-warning-500"
-              />
-              黄色预警 &lt; 30
-            </span>
-          </div>
+          {mainDistBand && mainDistBand.count > 0 && (
+            <p className="ds-body mt-3">
+              主力价格带：
+              <span className="font-semibold text-growth-600">
+                {mainDistBand.label}
+              </span>
+              ，共 {mainDistBand.count} 个商品
+            </p>
+          )}
         </section>
       </div>
 

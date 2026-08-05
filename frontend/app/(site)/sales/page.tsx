@@ -53,7 +53,7 @@ const WEEKDAYS = ["周日", "周一", "周二", "周三", "周四", "周五", "�
 // ===== 工具函数 =====
 function fmtCurrency(n: number | null | undefined): string {
   if (n == null || Number.isNaN(n) || n === 0) return "-";
-  return "$" + Math.round(n).toLocaleString("en-US");
+  return "฿" + Math.round(n).toLocaleString("en-US");
 }
 
 function fmtInt(n: number | null | undefined): string {

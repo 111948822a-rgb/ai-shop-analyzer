@@ -13,11 +13,11 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import Integer, func, or_, select
+from sqlalchemy import Integer, case, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models.standard import OrderStatus, StandardInfluencer, StandardOrder
+from app.models.standard import OrderStatus, StandardInfluencer, StandardOrder, StandardProduct
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
@@ -77,12 +77,22 @@ def _shop_filter_conditions(shop_ids: list[str] | None) -> list:
 def _period_agg(
     db: Session, start: datetime, end_exclusive: datetime, shop_conds: list | None = None
 ) -> dict:
-    """数据库层聚合一个时间窗口的 GMV / 订单数 / 客单价 / 退款率。"""
+    """数据库层聚合一个时间窗口的 GMV / 订单数 / 客单价 / 退款率。
+
+    GMV 统计排除已取消/已退款订单（status=REFUNDED），这些订单不应计入成交额。
+    订单数仍统计全部（含退款），退款率 = 退款单 / 总单。
+    """
     where_clauses = [StandardOrder.paid_at >= start, StandardOrder.paid_at < end_exclusive]
     if shop_conds:
         where_clauses.extend(shop_conds)
     stmt = select(
-        func.coalesce(func.sum(StandardOrder.gmv), 0.0).label("gmv"),
+        # GMV 只算非退款订单
+        func.coalesce(
+            func.sum(
+                func.cast(StandardOrder.status != OrderStatus.REFUNDED, Integer) * StandardOrder.gmv
+            ),
+            0.0,
+        ).label("gmv"),
         func.count(StandardOrder.id).label("orders"),
         func.coalesce(
             func.sum(
@@ -95,10 +105,12 @@ def _period_agg(
     gmv = float(row.gmv)
     orders = int(row.orders)
     refunds = int(row.refunds)
+    # 有效订单数（非退款），用于算真实客单价
+    valid_orders = orders - refunds
     return {
         "gmv": gmv,
         "orders": orders,
-        "aov": (gmv / orders) if orders else 0.0,
+        "aov": (gmv / valid_orders) if valid_orders else 0.0,
         "refund_rate": (refunds / orders * 100) if orders else 0.0,
     }
 
@@ -172,7 +184,12 @@ def gmv_trend(
     stmt = (
         select(
             func.date(StandardOrder.paid_at).label("day"),
-            func.coalesce(func.sum(StandardOrder.gmv), 0.0).label("gmv"),
+            func.coalesce(
+                func.sum(
+                    func.cast(StandardOrder.status != OrderStatus.REFUNDED, Integer) * StandardOrder.gmv
+                ),
+                0.0,
+            ).label("gmv"),
         )
         .where(*where_clauses)
         .group_by(func.date(StandardOrder.paid_at))
@@ -209,12 +226,30 @@ def top_products(
     stmt = (
         select(
             StandardOrder.product_name.label("product"),
-            func.coalesce(func.sum(StandardOrder.gmv), 0.0).label("gmv"),
+            func.coalesce(
+                func.sum(
+                    func.cast(StandardOrder.status != OrderStatus.REFUNDED, Integer) * StandardOrder.gmv
+                ),
+                0.0,
+            ).label("gmv"),
             func.count(StandardOrder.id).label("orders"),
+            # LEFT JOIN StandardProduct 补充 category / price（按 product_id + platform 关联，
+            # 用 MAX 聚合以兼容按 product_name 分组）
+            func.max(StandardProduct.category).label("category"),
+            func.max(StandardProduct.price).label("price"),
+        )
+        .outerjoin(
+            StandardProduct,
+            (StandardOrder.product_id == StandardProduct.product_id)
+            & (StandardOrder.platform == StandardProduct.platform),
         )
         .where(*where_clauses)
         .group_by(StandardOrder.product_name)
-        .order_by(func.sum(StandardOrder.gmv).desc())
+        .order_by(
+            func.sum(
+                func.cast(StandardOrder.status != OrderStatus.REFUNDED, Integer) * StandardOrder.gmv
+            ).desc()
+        )
         .limit(limit)
     )
     rows = db.execute(stmt).all()
@@ -224,6 +259,8 @@ def top_products(
             "product": r.product,
             "gmv": round(float(r.gmv), 2),
             "orders": int(r.orders),
+            "category": r.category,
+            "price": float(r.price) if r.price is not None else None,
         }
         for r in rows
     ]
@@ -279,3 +316,197 @@ def list_shops(db: Session = Depends(get_db)) -> dict:
     if not shops:
         shops.append({"shop_id": "", "name": "默认店铺", "order_count": 0, "gmv": 0.0})
     return {"shops": shops}
+
+
+# ----------------------------- 端点 6：地域分布 -----------------------------
+@router.get("/geo-distribution")
+def geo_distribution(
+    days: int = Query(30, ge=1, le=365),
+    shop_ids: str | None = Query(None, alias="shop_ids", description="逗号分隔的店铺ID"),
+    db: Session = Depends(get_db),
+) -> dict:
+    """按省份聚合订单数与 GMV，排除 province 为 NULL 的订单，按 GMV 降序取 Top 20。"""
+    shop_conds = _shop_filter_conditions(shop_ids.split(",") if shop_ids else None)
+    start, end_ex, _, _ = _window(days)
+    where_clauses = [
+        StandardOrder.paid_at >= start,
+        StandardOrder.paid_at < end_ex,
+        StandardOrder.province.isnot(None),
+    ]
+    if shop_conds:
+        where_clauses.extend(shop_conds)
+    stmt = (
+        select(
+            StandardOrder.province.label("province"),
+            func.count(StandardOrder.id).label("orders"),
+            func.coalesce(
+                func.sum(
+                    func.cast(StandardOrder.status != OrderStatus.REFUNDED, Integer) * StandardOrder.gmv
+                ),
+                0.0,
+            ).label("gmv"),
+        )
+        .where(*where_clauses)
+        .group_by(StandardOrder.province)
+        .order_by(
+            func.sum(
+                func.cast(StandardOrder.status != OrderStatus.REFUNDED, Integer) * StandardOrder.gmv
+            ).desc()
+        )
+        .limit(20)
+    )
+    rows = db.execute(stmt).all()
+    items = [
+        {
+            "province": r.province,
+            "orders": int(r.orders),
+            "gmv": round(float(r.gmv), 2),
+        }
+        for r in rows
+    ]
+    return {"items": items}
+
+
+# ----------------------------- 端点 7：订单状态分布 -----------------------------
+@router.get("/order-status")
+def order_status(
+    days: int = Query(30, ge=1, le=365),
+    shop_ids: str | None = Query(None, alias="shop_ids", description="逗号分隔的店铺ID"),
+    db: Session = Depends(get_db),
+) -> dict:
+    """按订单状态分组统计订单数、GMV 及占比百分比。"""
+    shop_conds = _shop_filter_conditions(shop_ids.split(",") if shop_ids else None)
+    start, end_ex, _, _ = _window(days)
+    where_clauses = [StandardOrder.paid_at >= start, StandardOrder.paid_at < end_ex]
+    if shop_conds:
+        where_clauses.extend(shop_conds)
+    stmt = (
+        select(
+            StandardOrder.status.label("status"),
+            func.count(StandardOrder.id).label("orders"),
+            func.coalesce(
+                func.sum(
+                    func.cast(StandardOrder.status != OrderStatus.REFUNDED, Integer) * StandardOrder.gmv
+                ),
+                0.0,
+            ).label("gmv"),
+        )
+        .where(*where_clauses)
+        .group_by(StandardOrder.status)
+    )
+    rows = db.execute(stmt).all()
+    total_orders = sum(int(r.orders) for r in rows) or 1
+    label_map = {
+        "completed": "已完成",
+        "shipped": "已发货",
+        "paid": "已付款",
+        "refunded": "已退款/取消",
+    }
+    items = []
+    for r in rows:
+        status_val = r.status.value if hasattr(r.status, "value") else str(r.status)
+        orders = int(r.orders)
+        items.append(
+            {
+                "status": status_val,
+                "label": label_map.get(status_val, status_val),
+                "orders": orders,
+                "gmv": round(float(r.gmv), 2),
+                "pct": round(orders / total_orders * 100, 1),
+            }
+        )
+    return {"items": items}
+
+
+# ----------------------------- 端点 8：订单类型分布 -----------------------------
+@router.get("/order-types")
+def order_types(
+    days: int = Query(30, ge=1, le=365),
+    shop_ids: str | None = Query(None, alias="shop_ids", description="逗号分隔的店铺ID"),
+    db: Session = Depends(get_db),
+) -> dict:
+    """按 is_sample_order / is_cod 分类统计订单数与 GMV。
+
+    优先级：样品单 > 货到付款 > 普通订单。
+    """
+    shop_conds = _shop_filter_conditions(shop_ids.split(",") if shop_ids else None)
+    start, end_ex, _, _ = _window(days)
+    where_clauses = [StandardOrder.paid_at >= start, StandardOrder.paid_at < end_ex]
+    if shop_conds:
+        where_clauses.extend(shop_conds)
+    type_expr = case(
+        (StandardOrder.is_sample_order, "sample"),
+        (StandardOrder.is_cod, "cod"),
+        else_="normal",
+    )
+    stmt = (
+        select(
+            type_expr.label("type"),
+            func.count(StandardOrder.id).label("orders"),
+            func.coalesce(
+                func.sum(
+                    func.cast(StandardOrder.status != OrderStatus.REFUNDED, Integer) * StandardOrder.gmv
+                ),
+                0.0,
+            ).label("gmv"),
+        )
+        .where(*where_clauses)
+        .group_by(type_expr)
+    )
+    rows = db.execute(stmt).all()
+    label_map = {
+        "sample": "样品单",
+        "cod": "货到付款",
+        "normal": "普通订单",
+    }
+    items = []
+    for r in rows:
+        type_val = r.type
+        items.append(
+            {
+                "type": type_val,
+                "label": label_map.get(type_val, type_val),
+                "orders": int(r.orders),
+                "gmv": round(float(r.gmv), 2),
+            }
+        )
+    return {"items": items}
+
+
+# ----------------------------- 端点 9：物流统计 -----------------------------
+@router.get("/shipping-stats")
+def shipping_stats(
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
+) -> dict:
+    """按物流商分组统计订单数，并计算平均配送时长（delivery_time - rts_time，小时）。"""
+    start, end_ex, _, _ = _window(days)
+    where_clauses = [StandardOrder.paid_at >= start, StandardOrder.paid_at < end_ex]
+    # 按物流商分组统计订单数
+    provider_stmt = (
+        select(
+            StandardOrder.shipping_provider.label("name"),
+            func.count(StandardOrder.id).label("orders"),
+        )
+        .where(*where_clauses)
+        .group_by(StandardOrder.shipping_provider)
+        .order_by(func.count(StandardOrder.id).desc())
+    )
+    provider_rows = db.execute(provider_stmt).all()
+    providers = [
+        {"name": (r.name or "未知"), "orders": int(r.orders)}
+        for r in provider_rows
+    ]
+    # 平均配送时长（小时）：仅统计同时有 rts_time 和 delivery_time 的订单
+    avg_stmt = select(
+        func.avg(
+            (func.julianday(StandardOrder.delivery_time) - func.julianday(StandardOrder.rts_time)) * 24.0
+        )
+    ).where(
+        *where_clauses,
+        StandardOrder.rts_time.isnot(None),
+        StandardOrder.delivery_time.isnot(None),
+    )
+    avg_hours = db.execute(avg_stmt).scalar()
+    avg_delivery_hours = round(float(avg_hours), 1) if avg_hours is not None else 0.0
+    return {"providers": providers, "avg_delivery_hours": avg_delivery_hours}

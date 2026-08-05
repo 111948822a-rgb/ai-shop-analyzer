@@ -103,6 +103,24 @@ class StandardOrder(Base):
     paid_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     province: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
+    # —— 扩展字段：充分利用 TikTok API 返回数据 ——
+    sku_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    seller_sku: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    sku_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    currency: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    original_price: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)  # 原价
+    platform_discount: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)  # 平台折扣
+    seller_discount: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)  # 卖家折扣
+    shipping_fee: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)  # 运费
+    is_cod: Mapped[bool] = mapped_column(Boolean, default=False)  # 货到付款
+    is_sample_order: Mapped[bool] = mapped_column(Boolean, default=False)  # 样品单
+    delivery_type: Mapped[str | None] = mapped_column(String(32), nullable=True)  # 配送方式
+    shipping_provider: Mapped[str | None] = mapped_column(String(64), nullable=True)  # 物流商
+    tracking_number: Mapped[str | None] = mapped_column(String(128), nullable=True)  # 物流单号
+    rts_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # 发货时间
+    delivery_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # 送达时间
+    update_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # 订单更新时间
+
     __table_args__ = (
         UniqueConstraint("order_id", "platform", name="uq_order_platform"),
         # —— 高频查询维度的索引（AI 工具按时间/店铺/商品/达人聚合）——
@@ -111,6 +129,8 @@ class StandardOrder(Base):
         Index("ix_orders_product_id", "product_id"),
         Index("ix_orders_creator_id", "creator_id"),
         Index("ix_orders_platform", "platform"),
+        Index("ix_orders_status", "status"),
+        Index("ix_orders_sku_id", "sku_id"),
     )
 
 

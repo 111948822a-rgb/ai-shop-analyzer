@@ -126,6 +126,8 @@ export interface TopProduct {
   product: string;
   gmv: number;
   orders: number;
+  category: string | null;
+  price: number | null;
 }
 
 export interface InfluencerPoint {
@@ -184,6 +186,73 @@ export async function getInfluencers(): Promise<{
   const res = await fetch(`${BASE}/api/dashboard/influencers`, { cache: "no-store" });
   if (!res.ok) throw new Error("获取达人数据失败");
   return (await res.json()) as { points: InfluencerPoint[]; suspicious_count: number };
+}
+
+// ===================== Dashboard 扩展端点 =====================
+export interface GeoDistributionItem {
+  province: string;
+  orders: number;
+  gmv: number;
+}
+
+export interface OrderStatusItem {
+  status: string;
+  label: string;
+  orders: number;
+  gmv: number;
+  pct: number;
+}
+
+export interface OrderTypeItem {
+  type: string;
+  label: string;
+  orders: number;
+  gmv: number;
+}
+
+export interface ShippingProvider {
+  name: string;
+  orders: number;
+}
+
+export interface ShippingStats {
+  providers: ShippingProvider[];
+  avg_delivery_hours: number;
+}
+
+export async function getGeoDistribution(days = 30): Promise<GeoDistributionItem[]> {
+  const res = await fetch(`${BASE}/api/dashboard/geo-distribution?days=${days}`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("获取地域分布失败");
+  const d = (await res.json()) as { items: GeoDistributionItem[] };
+  return d.items;
+}
+
+export async function getOrderStatus(days = 30): Promise<OrderStatusItem[]> {
+  const res = await fetch(`${BASE}/api/dashboard/order-status?days=${days}`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("获取订单状态分布失败");
+  const d = (await res.json()) as { items: OrderStatusItem[] };
+  return d.items;
+}
+
+export async function getOrderTypes(days = 30): Promise<OrderTypeItem[]> {
+  const res = await fetch(`${BASE}/api/dashboard/order-types?days=${days}`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("获取订单类型失败");
+  const d = (await res.json()) as { items: OrderTypeItem[] };
+  return d.items;
+}
+
+export async function getShippingStats(days = 30): Promise<ShippingStats> {
+  const res = await fetch(`${BASE}/api/dashboard/shipping-stats?days=${days}`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("获取物流统计失败");
+  return (await res.json()) as ShippingStats;
 }
 
 // ===================== 秒搭 H5 报告页 =====================

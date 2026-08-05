@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 import requests
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -348,6 +349,11 @@ def map_tiktok_order(raw_order: Dict[str, Any]) -> Dict[str, Any]:
         or raw_order.get("status")
         or raw_order.get("order_status")
     )
+    norm_status = _norm_status(raw_status)
+
+    # 已取消/已退款的订单不计入 GMV（TikTok API 返回的 payment.total_amount 仍含金额）
+    if norm_status == OrderStatus.REFUNDED:
+        gmv = 0.0
 
     return {
         "order_id": order_id,
@@ -361,11 +367,28 @@ def map_tiktok_order(raw_order: Dict[str, Any]) -> Dict[str, Any]:
         "creator_id": str(
             raw_order.get("creator_id") or raw_order.get("influencer_id") or ""
         ) or None,
-        "status": _norm_status(raw_status),
+        "status": norm_status,
         "paid_at": _parse_tiktok_datetime(
             raw_order.get("paid_time") or raw_order.get("create_time") or raw_order.get("order_create_time")
         ),
         "province": _extract_province(raw_order),
+        # —— 扩展字段：充分利用 API 返回数据 ——
+        "sku_id": str(first.get("sku_id") or "") or None,
+        "seller_sku": str(first.get("seller_sku") or "") or None,
+        "sku_name": str(first.get("sku_name") or "")[:255] or None,
+        "currency": str(payment.get("currency") or first.get("currency") or "") or None,
+        "original_price": float(first.get("original_price") or payment.get("original_total_product_price") or 0) or None,
+        "platform_discount": float(payment.get("platform_discount") or 0) or None,
+        "seller_discount": float(payment.get("seller_discount") or 0) or None,
+        "shipping_fee": float(payment.get("shipping_fee") or payment.get("original_shipping_fee") or 0) or None,
+        "is_cod": bool(raw_order.get("is_cod") or False),
+        "is_sample_order": bool(raw_order.get("is_sample_order") or False),
+        "delivery_type": str(raw_order.get("delivery_type") or "") or None,
+        "shipping_provider": str(raw_order.get("shipping_provider") or "") or None,
+        "tracking_number": str(raw_order.get("tracking_number") or first.get("tracking_number") or "") or None,
+        "rts_time": _parse_tiktok_datetime(raw_order.get("rts_time")),
+        "delivery_time": _parse_tiktok_datetime(raw_order.get("delivery_time")),
+        "update_time": _parse_tiktok_datetime(raw_order.get("update_time")),
     }
 
 
@@ -465,6 +488,45 @@ def _upsert_product(db: Session, data: Dict[str, Any]) -> str:
     return "inserted"
 
 
+def _aggregate_product_gmv(db: Session) -> int:
+    """按 product_id 聚合 TikTok 订单的 total_gmv / total_sold，回写到 StandardProduct。
+
+    聚合规则：platform='tiktok' 且 status != REFUNDED 的订单参与汇总。
+    回写时只更新已存在的 StandardProduct 记录，找不到则跳过（不自动创建）。
+    返回成功更新的记录数。
+    """
+    stmt = (
+        select(
+            StandardOrder.product_id.label("product_id"),
+            func.coalesce(func.sum(StandardOrder.gmv), 0.0).label("total_gmv"),
+            func.coalesce(func.sum(StandardOrder.quantity), 0).label("total_sold"),
+        )
+        .where(
+            StandardOrder.platform == Platform.TIKTOK,
+            StandardOrder.status != OrderStatus.REFUNDED,
+        )
+        .group_by(StandardOrder.product_id)
+    )
+    rows = db.execute(stmt).all()
+    updated = 0
+    for r in rows:
+        product = (
+            db.query(StandardProduct)
+            .filter(
+                StandardProduct.product_id == r.product_id,
+                StandardProduct.platform == Platform.TIKTOK,
+            )
+            .first()
+        )
+        if not product:
+            continue
+        product.total_gmv = round(float(r.total_gmv), 2)
+        product.total_sold = int(r.total_sold)
+        updated += 1
+    db.commit()
+    return updated
+
+
 def sync_tiktok_orders(
     start_date: Optional[str] = None, end_date: Optional[str] = None
 ) -> Dict[str, int]:
@@ -491,6 +553,9 @@ def sync_tiktok_orders(
         logger.info(
             f"Order sync done: fetched={len(orders)}, inserted={inserted}, updated={updated}, skipped={skipped}"
         )
+        # 订单同步完成后，按 product_id 聚合 GMV/销量 回写到 StandardProduct
+        agg_updated = _aggregate_product_gmv(db)
+        logger.info(f"Product GMV aggregation done: updated={agg_updated}")
         return {"total_fetched": len(orders), "inserted": inserted, "updated": updated, "skipped": skipped}
     except Exception as e:
         db.rollback()

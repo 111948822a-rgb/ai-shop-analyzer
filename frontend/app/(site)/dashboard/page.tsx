@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import {
   Area,
   AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
   Cell,
   Legend,
@@ -18,19 +20,27 @@ import {
 } from "recharts";
 import {
   getDashboardOverview,
+  getGeoDistribution,
   getGmvTrend,
+  getOrderStatus,
+  getOrderTypes,
+  getShippingStats,
   getTopProducts,
   syncTikTokData,
   type DashboardOverview,
+  type GeoDistributionItem,
   type GmvPoint,
   type Kpi,
+  type OrderStatusItem,
+  type OrderTypeItem,
+  type ShippingStats,
   type TopProduct,
 } from "@/lib/api";
 
 const CHART_COLORS = ["#2563EB", "#3B82F6", "#60A5FA", "#93C5FD", "#BFDBFE", "#DBEAFE"];
 const TRAFFIC_COLORS = ["#2563EB", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#9CA3AF"];
 
-const fmtCurrency = (v: number) => (v ? `$${v.toLocaleString("en-US", { maximumFractionDigits: 2 })}` : "-");
+const fmtCurrency = (v: number) => (v ? `฿${v.toLocaleString("en-US", { maximumFractionDigits: 2 })}` : "-");
 const fmtInt = (v: number) => (v ? v.toLocaleString("en-US") : "-");
 const fmtPercent = (v: number) => (v ? `${v.toFixed(2)}%` : "-");
 const fmtValue = (v: number, fmt?: string) => {
@@ -44,6 +54,10 @@ export default function DashboardPage() {
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [trend, setTrend] = useState<GmvPoint[]>([]);
   const [products, setProducts] = useState<TopProduct[]>([]);
+  const [geo, setGeo] = useState<GeoDistributionItem[]>([]);
+  const [orderStatus, setOrderStatus] = useState<OrderStatusItem[]>([]);
+  const [orderTypes, setOrderTypes] = useState<OrderTypeItem[]>([]);
+  const [shipping, setShipping] = useState<ShippingStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -53,14 +67,22 @@ export default function DashboardPage() {
     setLoading(true);
     setError(null);
     try {
-      const [ov, tr, tp] = await Promise.all([
+      const [ov, tr, tp, gd, os, ot, sh] = await Promise.all([
         getDashboardOverview(days),
         getGmvTrend(days),
         getTopProducts(10, days),
+        getGeoDistribution(days),
+        getOrderStatus(days),
+        getOrderTypes(days),
+        getShippingStats(days),
       ]);
       setOverview(ov);
       setTrend(tr);
       setProducts(tp);
+      setGeo(gd);
+      setOrderStatus(os);
+      setOrderTypes(ot);
+      setShipping(sh);
     } catch (e: any) {
       setError(e.message ?? "数据加载失败");
     } finally {
@@ -101,15 +123,17 @@ export default function DashboardPage() {
   // 当前窗口内是否有数据
   const hasData = kpis.some((k) => k.value > 0);
 
-  // 流量来源（暂无数据，显示占位）
-  const trafficData = [
-    { name: "推荐流量 For You", value: 0 },
-    { name: "搜索流量 Search", value: 0 },
-    { name: "达人带货 Affiliate", value: 0 },
-    { name: "广告投放 Ads", value: 0 },
-    { name: "店铺首页 Shop Profile", value: 0 },
-    { name: "其他 Other", value: 0 },
-  ];
+  // 地域分布 Top 10（按 GMV 降序）
+  const geoTop10 = geo
+    .slice()
+    .sort((a, b) => b.gmv - a.gmv)
+    .slice(0, 10);
+
+  // 订单类型总数（用于计算占比）
+  const orderTypesTotal = orderTypes.reduce((s, t) => s + t.orders, 0) || 1;
+
+  // 物流商订单总数（用于计算占比）
+  const shippingTotal = shipping?.providers.reduce((s, p) => s + p.orders, 0) || 1;
 
   return (
     <div className="space-y-5">
@@ -237,7 +261,7 @@ export default function DashboardPage() {
                 <XAxis dataKey="date" tick={{ fontSize: 12, fill: "#94a3b8" }} />
                 <YAxis
                   tick={{ fontSize: 12, fill: "#94a3b8" }}
-                  tickFormatter={(v) => `$${Math.round(v / 1000)}k`}
+                  tickFormatter={(v) => `฿${Math.round(v / 1000)}k`}
                 />
                 <Tooltip
                   contentStyle={{
@@ -245,7 +269,7 @@ export default function DashboardPage() {
                     border: "1px solid #e5e7eb",
                     fontSize: 12,
                   }}
-                  formatter={(v: number) => [`$${v.toLocaleString()}`, "GMV"]}
+                  formatter={(v: number) => [`฿${v.toLocaleString()}`, "GMV"]}
                 />
                 <Area
                   type="monotone"
@@ -259,29 +283,112 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* 流量来源 (1/3) */}
+        {/* 订单状态分布 (1/3) */}
         <div className="ds-card p-5">
-          <h2 className="ds-title mb-4 text-base">流量来源占比</h2>
-          <div className="ds-empty">
-            <div className="mb-3 text-4xl opacity-30">🥧</div>
-            <p className="ds-subtitle text-gray-400">暂无流量数据</p>
-            <p className="ds-caption mt-1">需对接 TikTok 流量分析接口</p>
-          </div>
-          <div className="mt-4 space-y-2">
-            {trafficData.map((t, i) => (
-              <div key={t.name} className="flex items-center justify-between text-xs">
-                <span className="flex items-center gap-2">
-                  <span
-                    className="h-2.5 w-2.5 rounded-full"
-                    style={{ background: TRAFFIC_COLORS[i] }}
-                  />
-                  <span className="text-gray-600">{t.name}</span>
-                </span>
-                <span className="text-gray-400">-</span>
-              </div>
-            ))}
-          </div>
+          <h2 className="ds-title mb-4 text-base">订单状态分布</h2>
+          {loading ? (
+            <div className="ds-skeleton h-[240px] w-full" />
+          ) : orderStatus.length === 0 ? (
+            <div className="ds-empty">
+              <div className="mb-3 text-4xl opacity-30">🥧</div>
+              <p className="ds-subtitle text-gray-400">暂无状态数据</p>
+              <p className="ds-caption mt-1">请先同步订单数据</p>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={240}>
+              <PieChart>
+                <Pie
+                  data={orderStatus}
+                  dataKey="orders"
+                  nameKey="label"
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={45}
+                  outerRadius={80}
+                  paddingAngle={2}
+                >
+                  {orderStatus.map((_, i) => (
+                    <Cell key={i} fill={TRAFFIC_COLORS[i % TRAFFIC_COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  contentStyle={{
+                    borderRadius: 8,
+                    border: "1px solid #e5e7eb",
+                    fontSize: 12,
+                  }}
+                  formatter={(v: number, n: string) => [`${Number(v).toLocaleString()} 单`, n]}
+                />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
         </div>
+      </div>
+
+      {/* 2.4 订单类型分析 */}
+      <div className="ds-card p-5">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="ds-title text-base">订单类型分析</h2>
+          <span className="ds-caption">样品单 / 货到付款 / 普通订单</span>
+        </div>
+        {loading ? (
+          <div className="ds-skeleton h-[220px] w-full" />
+        ) : orderTypes.length === 0 ? (
+          <div className="ds-empty">
+            <div className="mb-3 text-4xl opacity-30">🧾</div>
+            <p className="ds-subtitle text-gray-400">暂无类型数据</p>
+            <p className="ds-caption mt-1">请先同步订单数据</p>
+          </div>
+        ) : (
+          <div className="grid gap-4 lg:grid-cols-2">
+            <ResponsiveContainer width="100%" height={220}>
+              <PieChart>
+                <Pie
+                  data={orderTypes}
+                  dataKey="orders"
+                  nameKey="label"
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={45}
+                  outerRadius={80}
+                  paddingAngle={2}
+                >
+                  {orderTypes.map((_, i) => (
+                    <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  contentStyle={{
+                    borderRadius: 8,
+                    border: "1px solid #e5e7eb",
+                    fontSize: 12,
+                  }}
+                  formatter={(v: number, n: string) => [`${Number(v).toLocaleString()} 单`, n]}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="flex flex-col justify-center gap-2.5">
+              {orderTypes.map((t, i) => {
+                const pct = (t.orders / orderTypesTotal) * 100;
+                return (
+                  <div key={t.type} className="flex items-center justify-between text-sm">
+                    <span className="flex items-center gap-2">
+                      <span
+                        className="h-2.5 w-2.5 rounded-full"
+                        style={{ background: CHART_COLORS[i % CHART_COLORS.length] }}
+                      />
+                      <span className="text-gray-600">{t.label}</span>
+                    </span>
+                    <span className="tabular-nums text-gray-900">
+                      {t.orders.toLocaleString()} 单 · {pct.toFixed(1)}%
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 2.5 商品销量排行 + 2.6 地域销售分布 */}
@@ -331,14 +438,108 @@ export default function DashboardPage() {
         <div className="ds-card p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="ds-title text-base">销售地域分布</h2>
-            <span className="ds-caption">按 GMV</span>
+            <span className="ds-caption">Top 10 · 按 GMV</span>
           </div>
-          <div className="ds-empty">
-            <div className="mb-3 text-4xl opacity-30">🗺️</div>
-            <p className="ds-subtitle text-gray-400">暂无地域数据</p>
-            <p className="ds-caption mt-1">需同步订单收货地区数据</p>
-          </div>
+          {loading ? (
+            <div className="ds-skeleton h-[300px] w-full" />
+          ) : geoTop10.length === 0 ? (
+            <div className="ds-empty">
+              <div className="mb-3 text-4xl opacity-30">🗺️</div>
+              <p className="ds-subtitle text-gray-400">暂无地域数据</p>
+              <p className="ds-caption mt-1">需同步订单收货地区数据</p>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart
+                data={geoTop10}
+                layout="vertical"
+                margin={{ left: 10, right: 20, top: 0, bottom: 0 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
+                <XAxis
+                  type="number"
+                  tick={{ fontSize: 12, fill: "#94a3b8" }}
+                  tickFormatter={(v) => `฿${Math.round(v / 1000)}k`}
+                />
+                <YAxis
+                  type="category"
+                  dataKey="province"
+                  tick={{ fontSize: 12, fill: "#64748b" }}
+                  width={70}
+                />
+                <Tooltip
+                  contentStyle={{
+                    borderRadius: 8,
+                    border: "1px solid #e5e7eb",
+                    fontSize: 12,
+                  }}
+                  formatter={(v: number) => [`฿${Number(v).toLocaleString()}`, "GMV"]}
+                />
+                <Bar dataKey="gmv" fill="#2563EB" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </div>
+      </div>
+
+      {/* 2.7 物流配送统计 */}
+      <div className="ds-card p-5">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="ds-title text-base">物流配送统计</h2>
+          <span className="ds-caption">按物流商</span>
+        </div>
+        {loading ? (
+          <div className="ds-skeleton h-[200px] w-full" />
+        ) : !shipping || shipping.providers.length === 0 ? (
+          <div className="ds-empty">
+            <div className="mb-3 text-4xl opacity-30">🚚</div>
+            <p className="ds-subtitle text-gray-400">暂无物流数据</p>
+            <p className="ds-caption mt-1">需同步订单物流信息</p>
+          </div>
+        ) : (
+          <div className="grid gap-4 lg:grid-cols-3">
+            <div className="lg:col-span-2">
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={shipping.providers} margin={{ left: 0, right: 20, top: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#94a3b8" }} />
+                  <YAxis tick={{ fontSize: 12, fill: "#94a3b8" }} />
+                  <Tooltip
+                    contentStyle={{
+                      borderRadius: 8,
+                      border: "1px solid #e5e7eb",
+                      fontSize: 12,
+                    }}
+                    formatter={(v: number) => [`${Number(v).toLocaleString()} 单`, "订单数"]}
+                  />
+                  <Bar dataKey="orders" fill="#3B82F6" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="flex flex-col justify-center rounded-lg bg-gray-50 p-4">
+              <p className="ds-caption">平均配送时长</p>
+              <p className="mt-1 text-[32px] font-bold tabular-nums text-gray-900">
+                {shipping.avg_delivery_hours != null
+                  ? shipping.avg_delivery_hours.toFixed(1)
+                  : "-"}
+                <span className="ml-1 text-base font-normal text-gray-500">小时</span>
+              </p>
+              <div className="mt-3 space-y-1.5">
+                {shipping.providers.slice(0, 5).map((p, i) => {
+                  const pct = (p.orders / shippingTotal) * 100;
+                  return (
+                    <div key={i} className="flex items-center justify-between text-xs">
+                      <span className="truncate text-gray-600">{p.name}</span>
+                      <span className="ml-2 flex-shrink-0 tabular-nums text-gray-500">
+                        {pct.toFixed(1)}%
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import {
@@ -30,10 +30,15 @@ import {
   getMiaodaDashboard,
   generatePeriodReport,
   type MiaodaDashboard,
+  type MiaodaInfluencer,
   type PeriodReport,
 } from "@/lib/api";
 
 const PIE_COLORS = ["#6366f1", "#22c55e", "#f59e0b", "#ef4444", "#06b6d4", "#a855f7"];
+
+// ===== 排序类型 =====
+type SortKey = "followers" | "engagement_rate" | "conversion_rate" | "roi";
+type SortDir = "asc" | "desc";
 
 function fmtFollowers(n: number | null): string {
   if (n == null) return "—";
@@ -56,6 +61,10 @@ export default function InfluencersDashboardPage() {
   const [report, setReport] = useState<PeriodReport | null>(null);
   const [reportLoading, setReportLoading] = useState(false);
   const [reportError, setReportError] = useState("");
+
+  // 达人明细列表排序
+  const [sortKey, setSortKey] = useState<SortKey>("followers");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   const fetchData = useCallback(async (range: DateRange) => {
     setLoading(true);
@@ -100,6 +109,29 @@ export default function InfluencersDashboardPage() {
       setReportLoading(false);
     }
   };
+
+  // 达人明细列表：按选中列排序（null 值排到最后）
+  const sortedItems = useMemo<MiaodaInfluencer[]>(() => {
+    const list = data?.items ?? [];
+    const sorted = [...list].sort((a, b) => {
+      const av = a[sortKey];
+      const bv = b[sortKey];
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      return sortDir === "asc" ? av - bv : bv - av;
+    });
+    return sorted;
+  }, [data?.items, sortKey, sortDir]);
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("desc");
+    }
+  }
 
   if (loading && !data) return <p className="text-gray-500">正在加载达人数据看板…</p>;
   if (error && !data) return <p className="text-red-600">{error}</p>;
@@ -265,6 +297,140 @@ export default function InfluencersDashboardPage() {
         </Card>
       )}
 
+      {/* ---- 达人明细列表 ---- */}
+      <section className="ds-card p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="ds-title">达人明细列表</h2>
+            <p className="ds-subtitle mt-1">
+              点击列头排序 · 共 {sortedItems.length} 位达人
+            </p>
+          </div>
+          <div className="flex items-center gap-1.5 ds-caption">
+            <span>排序：</span>
+            <span className="text-gray-700">
+              {sortKey === "followers"
+                ? "粉丝数"
+                : sortKey === "engagement_rate"
+                  ? "互动率"
+                  : sortKey === "conversion_rate"
+                    ? "转化率"
+                    : "ROI"}
+            </span>
+            <span>({sortDir === "asc" ? "升序" : "降序"})</span>
+          </div>
+        </div>
+
+        <div className="mt-4 overflow-x-auto">
+          {sortedItems.length > 0 ? (
+            <table className="w-full text-left text-[13px]">
+              <thead className="border-b border-gray-200 bg-gray-50 text-xs text-gray-500">
+                <tr>
+                  <th className="px-3 py-2 text-left">头像 / 名称</th>
+                  <th className="px-3 py-2 text-left">平台</th>
+                  <Th
+                    onClick={() => toggleSort("followers")}
+                    active={sortKey === "followers"}
+                    dir={sortDir}
+                    align="right"
+                  >
+                    粉丝数
+                  </Th>
+                  <Th
+                    onClick={() => toggleSort("engagement_rate")}
+                    active={sortKey === "engagement_rate"}
+                    dir={sortDir}
+                    align="right"
+                  >
+                    互动率
+                  </Th>
+                  <Th
+                    onClick={() => toggleSort("conversion_rate")}
+                    active={sortKey === "conversion_rate"}
+                    dir={sortDir}
+                    align="right"
+                  >
+                    转化率
+                  </Th>
+                  <Th
+                    onClick={() => toggleSort("roi")}
+                    active={sortKey === "roi"}
+                    dir={sortDir}
+                    align="right"
+                  >
+                    ROI
+                  </Th>
+                  <th className="px-3 py-2 text-left">状态</th>
+                  <th className="px-3 py-2 text-left">垂直领域</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {sortedItems.map((inf) => (
+                  <tr key={inf.influencer_id} className="hover:bg-gray-50">
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        {inf.avatar_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={inf.avatar_url}
+                            alt={inf.name}
+                            className="h-8 w-8 shrink-0 rounded-full object-cover"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).style.display =
+                                "none";
+                            }}
+                          />
+                        ) : (
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-xs font-bold text-indigo-600">
+                            {inf.name?.charAt(0) || "?"}
+                          </span>
+                        )}
+                        <span className="max-w-[160px] truncate font-medium text-gray-900" title={inf.name}>
+                          {inf.name}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 text-gray-700">
+                      {inf.platform || "—"}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-gray-900">
+                      {fmtFollowers(inf.followers)}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-gray-900">
+                      {inf.engagement_rate != null
+                        ? `${inf.engagement_rate.toFixed(1)}%`
+                        : "—"}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-gray-900">
+                      {inf.conversion_rate != null
+                        ? `${inf.conversion_rate.toFixed(1)}%`
+                        : "—"}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-gray-900">
+                      {inf.roi != null ? inf.roi.toFixed(2) : "—"}
+                    </td>
+                    <td className="px-3 py-2">
+                      {inf.is_suspicious ? (
+                        <span className="ds-tag-down">异常</span>
+                      ) : (
+                        <span className="ds-tag-up">正常</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-gray-700">
+                      {inf.niche || "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="ds-empty">
+              <p className="ds-body">暂无达人明细数据，请先在秒搭中添加达人</p>
+            </div>
+          )}
+        </div>
+      </section>
+
       {/* ---- 手动生成报告 ---- */}
       <Card>
         <CardHeader>
@@ -377,5 +543,40 @@ function Empty({ text = "暂无数据" }: { text?: string }) {
     <div className="flex h-64 items-center justify-center text-sm text-gray-400">
       {text}
     </div>
+  );
+}
+
+// ===== 排序表头 =====
+function Th({
+  children,
+  onClick,
+  active,
+  dir,
+  align = "left",
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  active: boolean;
+  dir: SortDir;
+  align?: "left" | "right";
+}) {
+  return (
+    <th
+      onClick={onClick}
+      className={`cursor-pointer select-none px-3 py-2 ${
+        align === "right" ? "text-right" : "text-left"
+      } ${active ? "text-primary-600" : "text-gray-500"} hover:text-primary-600`}
+    >
+      <span
+        className={`inline-flex items-center gap-1 ${
+          align === "right" ? "flex-row-reverse" : ""
+        }`}
+      >
+        {children}
+        <span aria-hidden className="text-[10px]">
+          {active ? (dir === "asc" ? "▲" : "▼") : "↕"}
+        </span>
+      </span>
+    </th>
   );
 }
