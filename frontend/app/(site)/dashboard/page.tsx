@@ -36,6 +36,7 @@ import {
   type ShippingStats,
   type TopProduct,
 } from "@/lib/api";
+import { useT } from "@/lib/i18n/context";
 
 const CHART_COLORS = ["#2563EB", "#3B82F6", "#60A5FA", "#93C5FD", "#BFDBFE", "#DBEAFE"];
 const TRAFFIC_COLORS = ["#2563EB", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#9CA3AF"];
@@ -63,6 +64,8 @@ export default function DashboardPage() {
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
 
+  const t = useT();
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -84,11 +87,11 @@ export default function DashboardPage() {
       setOrderTypes(ot);
       setShipping(sh);
     } catch (e: any) {
-      setError(e.message ?? "数据加载失败");
+      setError(e.message ?? t("common.dataLoadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [days]);
+  }, [days, t]);
 
   useEffect(() => {
     load();
@@ -99,14 +102,19 @@ export default function DashboardPage() {
     setSyncMsg(null);
     try {
       const r = await syncTikTokData(days, true);
-      const o = r.orders ?? (r as any).result?.orders;
-      const p = r.products ?? (r as any).result?.products;
+      const o = r.result?.orders;
+      const p = r.result?.products;
       setSyncMsg(
-        `同步完成：订单 ${o?.inserted ?? 0} 新增 / ${o?.updated ?? 0} 更新，商品 ${p?.inserted ?? 0} 新增 / ${p?.updated ?? 0} 更新`
+        t("sync.resultOrder", {
+          inserted: o?.inserted ?? 0,
+          updated: o?.updated ?? 0,
+          pInserted: p?.inserted ?? 0,
+          pUpdated: p?.updated ?? 0,
+        })
       );
       await load();
     } catch (e: any) {
-      setSyncMsg(`同步失败: ${e.message}`);
+      setSyncMsg(`${t("common.syncFailed")}: ${e.message}`);
     } finally {
       setSyncing(false);
     }
@@ -130,7 +138,7 @@ export default function DashboardPage() {
     .slice(0, 10);
 
   // 订单类型总数（用于计算占比）
-  const orderTypesTotal = orderTypes.reduce((s, t) => s + t.orders, 0) || 1;
+  const orderTypesTotal = orderTypes.reduce((s, ot) => s + ot.orders, 0) || 1;
 
   // 物流商订单总数（用于计算占比）
   const shippingTotal = shipping?.providers.reduce((s, p) => s + p.orders, 0) || 1;
@@ -140,14 +148,14 @@ export default function DashboardPage() {
       {/* 顶部筛选栏 */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="ds-title">数据概览</h1>
+          <h1 className="ds-title">{t("dashboard.title")}</h1>
           <p className="ds-caption mt-0.5">
             {overview
-              ? `统计区间 ${overview.period.start} ~ ${overview.period.end}（近 ${overview.period.days} 天）`
-              : "加载中…"}
+              ? t("dashboard.period", { start: overview.period.start, end: overview.period.end, days: overview.period.days })
+              : t("common.loading")}
             {dataRange?.earliest && !hasData && (
               <span className="text-warning-600">
-                {" "}· 该时间段暂无订单数据，已同步数据范围：{dataRange.earliest} ~ {dataRange.latest}，请扩大时间范围
+                {" "}· {t("dashboard.noOrderData", { range: `${dataRange.earliest} ~ ${dataRange.latest}` })}
               </span>
             )}
           </p>
@@ -156,10 +164,10 @@ export default function DashboardPage() {
           {/* 时间范围 */}
           <div className="flex rounded-[8px] border border-gray-200 bg-white p-0.5">
             {[
-              { d: 7, l: "近7天" },
-              { d: 30, l: "近30天" },
-              { d: 90, l: "近90天" },
-              { d: 180, l: "近180天" },
+              { d: 7, l: t("common.last7days") },
+              { d: 30, l: t("common.last30days") },
+              { d: 90, l: t("common.last90days") },
+              { d: 180, l: t("common.last180days") },
             ].map((o) => (
               <button
                 key={o.d}
@@ -174,7 +182,7 @@ export default function DashboardPage() {
           </div>
           <button onClick={handleSync} disabled={syncing} className="ds-btn-secondary text-xs">
             <span className={syncing ? "animate-spin" : ""}>↻</span>
-            {syncing ? "同步中" : "同步数据"}
+            {syncing ? t("common.syncing") : t("common.sync")}
           </button>
         </div>
       </div>
@@ -183,7 +191,7 @@ export default function DashboardPage() {
       {syncMsg && (
         <div
           className={`rounded-card px-4 py-2.5 text-sm ${
-            syncMsg.startsWith("同步失败")
+            syncMsg.startsWith(t("common.syncFailed"))
               ? "bg-decline-50 text-decline-600"
               : "bg-primary-50 text-primary-700"
           }`}
@@ -195,7 +203,7 @@ export default function DashboardPage() {
       {/* 错误提示 */}
       {error && (
         <div className="rounded-card bg-decline-50 px-4 py-2.5 text-sm text-decline-600">
-          ⚠️ {error}，请先在「设置」页同步数据
+          ⚠️ {error} · {t("dashboard.syncHint")}
         </div>
       )}
 
@@ -224,7 +232,7 @@ export default function DashboardPage() {
                   <span className={up ? "ds-tag-up" : "ds-tag-down"}>
                     {up ? "↑" : "↓"} {Math.abs(k.delta_pct ?? 0).toFixed(1)}%
                   </span>
-                  <span className="ds-caption">较上期</span>
+                  <span className="ds-caption">{t("common.vsPrev")}</span>
                 </div>
               </div>
             );
@@ -237,16 +245,16 @@ export default function DashboardPage() {
         {/* 趋势图 (2/3) */}
         <div className="ds-card p-5 lg:col-span-2">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="ds-title text-base">GMV 与订单量趋势</h2>
-            <span className="ds-caption">按日</span>
+            <h2 className="ds-title text-base">{t("dashboard.gmvTrendTitle")}</h2>
+            <span className="ds-caption">{t("dashboard.gmvTrendSub")}</span>
           </div>
           {loading ? (
             <div className="ds-skeleton h-[280px] w-full" />
           ) : trendData.length === 0 ? (
             <div className="ds-empty">
               <div className="mb-3 text-4xl opacity-30">📈</div>
-              <p className="ds-subtitle text-gray-400">暂无趋势数据</p>
-              <p className="ds-caption mt-1">请先同步 TikTok 数据</p>
+              <p className="ds-subtitle text-gray-400">{t("dashboard.noTrendData")}</p>
+              <p className="ds-caption mt-1">{t("dashboard.noTrendHint")}</p>
             </div>
           ) : (
             <ResponsiveContainer width="100%" height={280}>
@@ -285,14 +293,14 @@ export default function DashboardPage() {
 
         {/* 订单状态分布 (1/3) */}
         <div className="ds-card p-5">
-          <h2 className="ds-title mb-4 text-base">订单状态分布</h2>
+          <h2 className="ds-title mb-4 text-base">{t("dashboard.orderStatusTitle")}</h2>
           {loading ? (
             <div className="ds-skeleton h-[240px] w-full" />
           ) : orderStatus.length === 0 ? (
             <div className="ds-empty">
               <div className="mb-3 text-4xl opacity-30">🥧</div>
-              <p className="ds-subtitle text-gray-400">暂无状态数据</p>
-              <p className="ds-caption mt-1">请先同步订单数据</p>
+              <p className="ds-subtitle text-gray-400">{t("dashboard.noStatusData")}</p>
+              <p className="ds-caption mt-1">{t("dashboard.noStatusHint")}</p>
             </div>
           ) : (
             <ResponsiveContainer width="100%" height={240}>
@@ -317,7 +325,7 @@ export default function DashboardPage() {
                     border: "1px solid #e5e7eb",
                     fontSize: 12,
                   }}
-                  formatter={(v: number, n: string) => [`${Number(v).toLocaleString()} 单`, n]}
+                  formatter={(v: number, n: string) => [`${Number(v).toLocaleString()} ${t("common.orderUnit")}`, n]}
                 />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
               </PieChart>
@@ -329,16 +337,16 @@ export default function DashboardPage() {
       {/* 2.4 订单类型分析 */}
       <div className="ds-card p-5">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="ds-title text-base">订单类型分析</h2>
-          <span className="ds-caption">样品单 / 货到付款 / 普通订单</span>
+          <h2 className="ds-title text-base">{t("dashboard.orderTypeTitle")}</h2>
+          <span className="ds-caption">{t("dashboard.orderTypeSub")}</span>
         </div>
         {loading ? (
           <div className="ds-skeleton h-[220px] w-full" />
         ) : orderTypes.length === 0 ? (
           <div className="ds-empty">
             <div className="mb-3 text-4xl opacity-30">🧾</div>
-            <p className="ds-subtitle text-gray-400">暂无类型数据</p>
-            <p className="ds-caption mt-1">请先同步订单数据</p>
+            <p className="ds-subtitle text-gray-400">{t("dashboard.noTypeData")}</p>
+            <p className="ds-caption mt-1">{t("dashboard.noTypeHint")}</p>
           </div>
         ) : (
           <div className="grid gap-4 lg:grid-cols-2">
@@ -364,24 +372,24 @@ export default function DashboardPage() {
                     border: "1px solid #e5e7eb",
                     fontSize: 12,
                   }}
-                  formatter={(v: number, n: string) => [`${Number(v).toLocaleString()} 单`, n]}
+                  formatter={(v: number, n: string) => [`${Number(v).toLocaleString()} ${t("common.orderUnit")}`, n]}
                 />
               </PieChart>
             </ResponsiveContainer>
             <div className="flex flex-col justify-center gap-2.5">
-              {orderTypes.map((t, i) => {
-                const pct = (t.orders / orderTypesTotal) * 100;
+              {orderTypes.map((ot, i) => {
+                const pct = (ot.orders / orderTypesTotal) * 100;
                 return (
-                  <div key={t.type} className="flex items-center justify-between text-sm">
+                  <div key={ot.type} className="flex items-center justify-between text-sm">
                     <span className="flex items-center gap-2">
                       <span
                         className="h-2.5 w-2.5 rounded-full"
                         style={{ background: CHART_COLORS[i % CHART_COLORS.length] }}
                       />
-                      <span className="text-gray-600">{t.label}</span>
+                      <span className="text-gray-600">{ot.label}</span>
                     </span>
                     <span className="tabular-nums text-gray-900">
-                      {t.orders.toLocaleString()} 单 · {pct.toFixed(1)}%
+                      {ot.orders.toLocaleString()} {t("common.orderUnit")} · {pct.toFixed(1)}%
                     </span>
                   </div>
                 );
@@ -396,8 +404,8 @@ export default function DashboardPage() {
         {/* 商品排行 */}
         <div className="ds-card p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="ds-title text-base">商品销量 TOP10</h2>
-            <span className="ds-caption">按 GMV</span>
+            <h2 className="ds-title text-base">{t("dashboard.topProductsTitle")}</h2>
+            <span className="ds-caption">{t("dashboard.topProductsSub")}</span>
           </div>
           {loading ? (
             <div className="space-y-2">
@@ -408,7 +416,7 @@ export default function DashboardPage() {
           ) : products.length === 0 ? (
             <div className="ds-empty">
               <div className="mb-3 text-4xl opacity-30">📦</div>
-              <p className="ds-subtitle text-gray-400">暂无商品数据</p>
+              <p className="ds-subtitle text-gray-400">{t("dashboard.noProductData")}</p>
             </div>
           ) : (
             <div className="space-y-1">
@@ -437,16 +445,16 @@ export default function DashboardPage() {
         {/* 地域分布 */}
         <div className="ds-card p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="ds-title text-base">销售地域分布</h2>
-            <span className="ds-caption">Top 10 · 按 GMV</span>
+            <h2 className="ds-title text-base">{t("dashboard.geoTitle")}</h2>
+            <span className="ds-caption">{t("dashboard.geoSub")}</span>
           </div>
           {loading ? (
             <div className="ds-skeleton h-[300px] w-full" />
           ) : geoTop10.length === 0 ? (
             <div className="ds-empty">
               <div className="mb-3 text-4xl opacity-30">🗺️</div>
-              <p className="ds-subtitle text-gray-400">暂无地域数据</p>
-              <p className="ds-caption mt-1">需同步订单收货地区数据</p>
+              <p className="ds-subtitle text-gray-400">{t("dashboard.noGeoData")}</p>
+              <p className="ds-caption mt-1">{t("dashboard.noGeoHint")}</p>
             </div>
           ) : (
             <ResponsiveContainer width="100%" height={300}>
@@ -485,16 +493,16 @@ export default function DashboardPage() {
       {/* 2.7 物流配送统计 */}
       <div className="ds-card p-5">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="ds-title text-base">物流配送统计</h2>
-          <span className="ds-caption">按物流商</span>
+          <h2 className="ds-title text-base">{t("dashboard.shippingTitle")}</h2>
+          <span className="ds-caption">{t("dashboard.shippingSub")}</span>
         </div>
         {loading ? (
           <div className="ds-skeleton h-[200px] w-full" />
         ) : !shipping || shipping.providers.length === 0 ? (
           <div className="ds-empty">
             <div className="mb-3 text-4xl opacity-30">🚚</div>
-            <p className="ds-subtitle text-gray-400">暂无物流数据</p>
-            <p className="ds-caption mt-1">需同步订单物流信息</p>
+            <p className="ds-subtitle text-gray-400">{t("dashboard.noShippingData")}</p>
+            <p className="ds-caption mt-1">{t("dashboard.noShippingHint")}</p>
           </div>
         ) : (
           <div className="grid gap-4 lg:grid-cols-3">
@@ -510,19 +518,19 @@ export default function DashboardPage() {
                       border: "1px solid #e5e7eb",
                       fontSize: 12,
                     }}
-                    formatter={(v: number) => [`${Number(v).toLocaleString()} 单`, "订单数"]}
+                    formatter={(v: number) => [`${Number(v).toLocaleString()} ${t("common.orderUnit")}`, t("common.orders")]}
                   />
                   <Bar dataKey="orders" fill="#3B82F6" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
             <div className="flex flex-col justify-center rounded-lg bg-gray-50 p-4">
-              <p className="ds-caption">平均配送时长</p>
+              <p className="ds-caption">{t("dashboard.avgDeliveryTime")}</p>
               <p className="mt-1 text-[32px] font-bold tabular-nums text-gray-900">
                 {shipping.avg_delivery_hours != null
                   ? shipping.avg_delivery_hours.toFixed(1)
                   : "-"}
-                <span className="ml-1 text-base font-normal text-gray-500">小时</span>
+                <span className="ml-1 text-base font-normal text-gray-500">{t("common.hours")}</span>
               </p>
               <div className="mt-3 space-y-1.5">
                 {shipping.providers.slice(0, 5).map((p, i) => {

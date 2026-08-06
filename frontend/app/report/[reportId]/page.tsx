@@ -28,6 +28,7 @@ import {
   Zap,
 } from 'lucide-react'
 import Link from 'next/link'
+import { useT } from '@/lib/i18n/context'
 
 interface ReportData {
   report_id: string
@@ -93,6 +94,7 @@ interface ReportStatus {
 }
 
 export default function ReportPage({ params }: { params: { reportId: string } }) {
+  const t = useT()
   const [reportStatus, setReportStatus] = useState<ReportStatus>({ status: 'loading' })
 
   const fetchReport = useCallback(async () => {
@@ -128,7 +130,7 @@ export default function ReportPage({ params }: { params: { reportId: string } })
             <div className="absolute inset-0 bg-gradient-to-r from-primary-500 to-purple-500 rounded-full animate-ping opacity-20" />
             <Loader2 className="w-12 h-12 text-primary-400 animate-spin" />
           </div>
-          <p className="mt-4 text-slate-400">正在加载报告...</p>
+          <p className="mt-4 text-slate-400">{t("report.loading")}</p>
         </div>
       </div>
     )
@@ -142,10 +144,10 @@ export default function ReportPage({ params }: { params: { reportId: string } })
             <div className="w-16 h-16 mx-auto mb-4 bg-red-500/20 rounded-full flex items-center justify-center">
               <AlertTriangle className="w-8 h-8 text-red-400" />
             </div>
-            <h2 className="text-xl font-semibold mb-4 text-red-400">报告加载失败</h2>
+            <h2 className="text-xl font-semibold mb-4 text-red-400">{t("report.loadFailed")}</h2>
             <p className="text-slate-400 mb-6">{reportStatus.error}</p>
             <button onClick={fetchReport} className="btn-primary">
-              重新加载
+              {t("report.reload")}
             </button>
           </div>
         </div>
@@ -168,7 +170,7 @@ export default function ReportPage({ params }: { params: { reportId: string } })
           <div className="flex items-center gap-4">
             <Link href="/" className="btn-secondary flex items-center gap-2">
               <ArrowLeft className="w-4 h-4" />
-              返回首页
+              {t("report.backHome")}
             </Link>
             <div>
               <h1 className="text-2xl font-bold gradient-text">{report.report_title}</h1>
@@ -178,12 +180,12 @@ export default function ReportPage({ params }: { params: { reportId: string } })
                   {report.period}
                 </span>
                 <span className={`px-2 py-1 rounded text-xs ${report.report_type === 'weekly' ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400'}`}>
-                  {report.report_type === 'weekly' ? '周报' : '月报'}
+                  {report.report_type === 'weekly' ? t("report.weekly") : t("report.monthly")}
                 </span>
               </div>
             </div>
           </div>
-          <span className="status-completed">已完成</span>
+          <span className="status-completed">{t("report.completed")}</span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
@@ -193,14 +195,14 @@ export default function ReportPage({ params }: { params: { reportId: string } })
                 <DollarSign className="w-5 h-5 text-green-400" />
               </div>
               <div>
-                <div className="text-xs text-slate-400">总GMV</div>
+                <div className="text-xs text-slate-400">{t("report.totalGMV")}</div>
                 <div className="text-xl font-bold text-green-400">{formatCurrency(report.core_summary.total_gmv)}</div>
               </div>
             </div>
             {report.core_summary.gmv_growth !== undefined && (
               <div className={`mt-2 text-xs flex items-center gap-1 ${report.core_summary.gmv_growth >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                 {report.core_summary.gmv_growth >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                同比 {report.core_summary.gmv_growth >= 0 ? '+' : ''}{formatPercent(report.core_summary.gmv_growth)}
+                {t("report.yoyGrowth", { growth: `${report.core_summary.gmv_growth >= 0 ? '+' : ''}${formatPercent(report.core_summary.gmv_growth)}` })}
               </div>
             )}
           </div>
@@ -211,14 +213,14 @@ export default function ReportPage({ params }: { params: { reportId: string } })
                 <ShoppingBag className="w-5 h-5 text-blue-400" />
               </div>
               <div>
-                <div className="text-xs text-slate-400">订单数</div>
+                <div className="text-xs text-slate-400">{t("report.orderCount")}</div>
                 <div className="text-xl font-bold text-blue-400">{report.core_summary.total_orders.toLocaleString()}</div>
               </div>
             </div>
             {report.core_summary.order_growth !== undefined && (
               <div className={`mt-2 text-xs flex items-center gap-1 ${report.core_summary.order_growth >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                 {report.core_summary.order_growth >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                同比 {report.core_summary.order_growth >= 0 ? '+' : ''}{formatPercent(report.core_summary.order_growth)}
+                {t("report.yoyGrowth", { growth: `${report.core_summary.order_growth >= 0 ? '+' : ''}${formatPercent(report.core_summary.order_growth)}` })}
               </div>
             )}
           </div>
@@ -229,7 +231,7 @@ export default function ReportPage({ params }: { params: { reportId: string } })
                 <Target className="w-5 h-5 text-purple-400" />
               </div>
               <div>
-                <div className="text-xs text-slate-400">客单价</div>
+                <div className="text-xs text-slate-400">{t("report.aov")}</div>
                 <div className="text-xl font-bold text-purple-400">{formatCurrency(report.core_summary.avg_order_value)}</div>
               </div>
             </div>
@@ -241,7 +243,7 @@ export default function ReportPage({ params }: { params: { reportId: string } })
                 <Users className="w-5 h-5 text-orange-400" />
               </div>
               <div>
-                <div className="text-xs text-slate-400">达人数量</div>
+                <div className="text-xs text-slate-400">{t("report.influencerCount")}</div>
                 <div className="text-xl font-bold text-orange-400">{report.influencer_red_list.length + report.influencer_black_list.length}</div>
               </div>
             </div>
@@ -252,7 +254,7 @@ export default function ReportPage({ params }: { params: { reportId: string } })
           <div className="glass-card p-6">
             <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
               <Award className="w-5 h-5 text-green-400" />
-              商品红榜 (Top 5)
+              {t("report.redList")}
             </h2>
             <div className="space-y-3">
               {report.product_red_list.slice(0, 5).map((product, index) => (
@@ -271,7 +273,7 @@ export default function ReportPage({ params }: { params: { reportId: string } })
                   </div>
                   <div className="text-right">
                     <div className="font-bold text-green-400">{formatCurrency(product.total_sales)}</div>
-                    <div className="text-xs text-slate-400">{product.total_orders} 订单</div>
+                    <div className="text-xs text-slate-400">{product.total_orders} {t("report.orderUnit")}</div>
                   </div>
                 </div>
               ))}
@@ -281,7 +283,7 @@ export default function ReportPage({ params }: { params: { reportId: string } })
           <div className="glass-card p-6">
             <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
               <AlertCircle className="w-5 h-5 text-red-400" />
-              商品黑榜
+              {t("report.blackList")}
             </h2>
             <div className="space-y-3">
               {report.product_black_list.slice(0, 3).map((product, index) => (
@@ -294,7 +296,7 @@ export default function ReportPage({ params }: { params: { reportId: string } })
                   </div>
                   <div className="text-right">
                     <div className="font-bold text-red-400">{formatCurrency(product.total_sales)}</div>
-                    <div className="text-xs text-slate-400">{product.total_orders} 订单</div>
+                    <div className="text-xs text-slate-400">{product.total_orders} {t("report.orderUnit")}</div>
                   </div>
                 </div>
               ))}
@@ -306,7 +308,7 @@ export default function ReportPage({ params }: { params: { reportId: string } })
           <div className="glass-card p-6">
             <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
               <CheckCircle className="w-5 h-5 text-green-400" />
-              达人红榜 (Top 5)
+              {t("report.influencerRed")}
             </h2>
             <div className="space-y-3">
               {report.influencer_red_list.slice(0, 5).map((influencer, index) => (
@@ -322,7 +324,7 @@ export default function ReportPage({ params }: { params: { reportId: string } })
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-slate-200 truncate">{influencer.influencer_name}</div>
                     <div className="text-xs text-slate-400">
-                      {influencer.follower_count.toLocaleString()} 粉丝 | 互动率 {formatPercent(influencer.engagement_rate)}
+                      {t("report.followers", { n: influencer.follower_count.toLocaleString() })} | {t("report.engagement", { v: formatPercent(influencer.engagement_rate) })}
                     </div>
                   </div>
                   <div className="text-right">
@@ -337,7 +339,7 @@ export default function ReportPage({ params }: { params: { reportId: string } })
           <div className="glass-card p-6">
             <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
               <AlertTriangle className="w-5 h-5 text-red-400" />
-              🚨 达人黑榜 (疑似水军)
+              {t("report.influencerBlack")}
             </h2>
             <div className="space-y-3">
               {report.influencer_black_list.slice(0, 5).map((influencer, index) => (
@@ -348,9 +350,9 @@ export default function ReportPage({ params }: { params: { reportId: string } })
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-slate-200">{influencer.influencer_name}</div>
                     <div className="text-xs text-slate-400 mt-1">
-                      {influencer.follower_count.toLocaleString()} 粉丝 | 
-                      <span className="text-orange-400"> 互动率 {formatPercent(influencer.engagement_rate)}</span> | 
-                      <span className="text-red-400"> 转化率 {formatPercent(influencer.conversion_rate)}</span>
+                      {t("report.followers", { n: influencer.follower_count.toLocaleString() })} | 
+                      <span className="text-orange-400"> {t("report.engagement", { v: formatPercent(influencer.engagement_rate) })}</span> | 
+                      <span className="text-red-400"> {t("report.conversion", { v: formatPercent(influencer.conversion_rate) })}</span>
                     </div>
                     <div className="text-xs text-red-300 mt-2 line-clamp-2">{influencer.risk_reason}</div>
                   </div>
@@ -364,7 +366,7 @@ export default function ReportPage({ params }: { params: { reportId: string } })
           <div className="glass-card p-6">
             <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
               <Globe className="w-5 h-5 text-blue-400" />
-              跨站点分析
+              {t("report.crossSite")}
             </h2>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
@@ -397,14 +399,14 @@ export default function ReportPage({ params }: { params: { reportId: string } })
           <div className="glass-card p-6">
             <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-green-400" />
-              销售趋势分析
+              {t("report.trendAnalysis")}
             </h2>
             <div className="bg-slate-700/30 rounded-lg p-4 mb-4">
-              <p className="text-slate-300">{report.trend_analysis || '暂无趋势分析数据'}</p>
+              <p className="text-slate-300">{report.trend_analysis || t("report.noTrend")}</p>
             </div>
-            <h3 className="text-sm font-medium text-orange-400 mb-3">异动归因</h3>
+            <h3 className="text-sm font-medium text-orange-400 mb-3">{t("report.anomaly")}</h3>
             <div className="bg-orange-500/10 rounded-lg p-4 border border-orange-500/20">
-              <p className="text-orange-300">{report.anomaly_analysis || '暂无异动数据'}</p>
+              <p className="text-orange-300">{report.anomaly_analysis || t("report.noAnomaly")}</p>
             </div>
           </div>
         </div>
@@ -412,7 +414,7 @@ export default function ReportPage({ params }: { params: { reportId: string } })
         <div className="glass-card p-6">
           <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
             <Zap className="w-5 h-5 text-yellow-400" />
-            下一步行动建议
+            {t("report.nextSteps")}
           </h2>
           <div className="space-y-3">
             {report.action_suggestions.map((suggestion, index) => (
@@ -427,7 +429,7 @@ export default function ReportPage({ params }: { params: { reportId: string } })
         </div>
 
         <div className="mt-8 text-center text-slate-500 text-sm">
-          报告生成时间: {new Date(report.generated_at).toLocaleString('zh-CN')}
+          {t("report.generatedAt", { time: new Date(report.generated_at).toLocaleString() })}
         </div>
       </div>
     </div>

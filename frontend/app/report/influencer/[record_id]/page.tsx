@@ -13,6 +13,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { getMiaodaReport, type MiaodaReport } from "@/lib/api";
+import { useT } from "@/lib/i18n/context";
 
 const LANG_LABELS: Record<string, string> = {
   zh: "中文",
@@ -25,13 +26,14 @@ function scoreColor(score: number): string {
   return "#dc2626"; // 红
 }
 
-function fmtFollowers(n: number): string {
-  if (n >= 10000) return `${(n / 10000).toFixed(1)} 万`;
+function fmtFollowers(n: number, t: ReturnType<typeof useT>): string {
+  if (n >= 10000) return `${(n / 10000).toFixed(1)} ${t("common.wan")}`;
   return n.toLocaleString("zh-CN");
 }
 
 export default function InfluencerReportPage() {
   const { record_id } = useParams<{ record_id: string }>();
+  const t = useT();
   const [report, setReport] = useState<MiaodaReport | null>(null);
   const [error, setError] = useState("");
   const [lang, setLang] = useState<string>("zh");
@@ -53,7 +55,7 @@ export default function InfluencerReportPage() {
           timer = setTimeout(poll, 2500);
         }
       } catch (e) {
-        if (!stopped) setError(e instanceof Error ? e.message : "加载失败");
+        if (!stopped) setError(e instanceof Error ? e.message : t("report.loadFailedGeneric"));
       }
     }
     poll();
@@ -89,16 +91,16 @@ export default function InfluencerReportPage() {
         )}
 
         {!report && !error && (
-          <Loading text="正在加载达人分析报告…" />
+          <Loading text={t("report.loadingInfluencer")} />
         )}
 
         {isProcessing && (
-          <Loading text="AI 正在分析达人数据…" sub="通常需要 10-30 秒，本页会自动刷新" />
+          <Loading text={t("report.aiAnalyzing")} sub={t("report.aiAnalyzingSub")} />
         )}
 
         {isFailed && (
           <div className="rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">
-            分析失败：{report?.error || "未知错误"}
+            {t("report.analysisFailed", { error: report?.error || t("common.unknown") })}
           </div>
         )}
 
@@ -109,7 +111,7 @@ export default function InfluencerReportPage() {
               <div className="bg-gradient-to-r from-indigo-600 to-violet-600 px-5 py-5 text-white">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs text-indigo-100">达人匹配分析报告</p>
+                    <p className="text-xs text-indigo-100">{t("report.matchTitle")}</p>
                     <h1 className="mt-0.5 text-xl font-bold">{report.influencer_name}</h1>
                     <div className="mt-1.5 flex flex-wrap gap-1.5">
                       {report.platform && (
@@ -119,12 +121,12 @@ export default function InfluencerReportPage() {
                       )}
                       {report.followers > 0 && (
                         <Badge className="bg-white/20 text-white border-transparent">
-                          {fmtFollowers(report.followers)} 粉丝
+                          {t("report.followers", { n: fmtFollowers(report.followers, t) })}
                         </Badge>
                       )}
                       {report.target_product && (
                         <Badge className="bg-white/20 text-white border-transparent">
-                          目标货品：{report.target_product}
+                          {t("report.targetProduct", { product: report.target_product })}
                         </Badge>
                       )}
                     </div>
@@ -136,7 +138,7 @@ export default function InfluencerReportPage() {
                     >
                       {report.ai_match_score}
                     </div>
-                    <span className="mt-1 text-[11px] text-indigo-100">匹配度</span>
+                    <span className="mt-1 text-[11px] text-indigo-100">{t("report.matchScore")}</span>
                   </div>
                 </div>
                 <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/20">
@@ -151,7 +153,7 @@ export default function InfluencerReportPage() {
             {/* ---- AI 匹配度雷达图 ---- */}
             <Card>
               <CardHeader>
-                <CardTitle>AI 匹配度雷达</CardTitle>
+                <CardTitle>{t("report.radarTitle")}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="h-64 w-full">
@@ -168,7 +170,7 @@ export default function InfluencerReportPage() {
                         axisLine={false}
                       />
                       <Radar
-                        name="匹配度"
+                        name={t("report.matchScore")}
                         dataKey="value"
                         stroke="#6366f1"
                         fill="#6366f1"
@@ -183,7 +185,7 @@ export default function InfluencerReportPage() {
             {/* ---- 人货匹配分析 ---- */}
             <Card>
               <CardHeader>
-                <CardTitle>人货匹配分析</CardTitle>
+                <CardTitle>{t("report.matchAnalysis")}</CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-sm leading-relaxed text-slate-600">
@@ -196,7 +198,7 @@ export default function InfluencerReportPage() {
             <Card className="border-red-200 bg-red-50/60">
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-red-700">
-                  <span>⚠️</span> 避坑预警
+                  <span>⚠️</span> {t("report.warningTitle")}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -209,12 +211,12 @@ export default function InfluencerReportPage() {
             {/* ---- 多语种建联话术 ---- */}
             <Card>
               <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
-                <CardTitle>建联话术</CardTitle>
+                <CardTitle>{t("report.scriptTitle")}</CardTitle>
                 <button
                   onClick={copyScript}
                   className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-indigo-700"
                 >
-                  {copied ? "✓ 已复制" : "一键复制"}
+                  {copied ? t("report.copied") : t("report.oneClickCopy")}
                 </button>
               </CardHeader>
               <CardContent>
@@ -244,7 +246,7 @@ export default function InfluencerReportPage() {
             </Card>
 
             <p className="pb-4 text-center text-[11px] text-slate-400">
-              由 AI Shop Analyzer 自动生成
+              {t("report.autoGenerated")}
             </p>
           </div>
         )}

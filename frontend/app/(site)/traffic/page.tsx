@@ -3,6 +3,8 @@
 // 流量分析页面（数据缺失骨架）
 // 后端暂无对应 API，所有数据区域显示空状态占位
 
+import { useT } from "@/lib/i18n/context";
+
 // ===== 指标卡 =====
 function MetricCard({ label, hint }: { label: string; hint?: string }) {
   return (
@@ -34,42 +36,54 @@ function SectionHeader({
 
 // 空状态
 function EmptyState({ emoji, source }: { emoji: string; source: string }) {
+  const t = useT();
   return (
     <div className="ds-empty">
       <div className="mb-3 text-4xl opacity-30">{emoji}</div>
-      <p className="ds-subtitle text-gray-400">暂无数据</p>
-      <p className="ds-caption mt-1">需对接{source}接口</p>
+      <p className="ds-subtitle text-gray-400">{t("common.noData")}</p>
+      <p className="ds-caption mt-1">{t("skeleton.needApi", { source })}</p>
     </div>
   );
 }
 
 export default function TrafficPage() {
+  const t = useT();
   return (
     <div className="space-y-6">
       {/* 页面标题 */}
       <div>
-        <h1 className="ds-title">流量分析</h1>
-        <p className="ds-subtitle mt-1">
-          访客来源、流量质量与搜索热词，评估店铺引流效果
-        </p>
+        <h1 className="ds-title">{t("skeleton.trafficTitle")}</h1>
+        <p className="ds-subtitle mt-1">{t("skeleton.trafficSub")}</p>
       </div>
 
       {/* 1. 顶部4列指标卡 */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard label="总访客数 UV" hint="独立访客去重" />
-        <MetricCard label="页面浏览量 PV" hint="全店页面浏览总量" />
-        <MetricCard label="人均浏览页数" hint="PV / UV" />
-        <MetricCard label="平均停留时长" hint="单访客平均停留" />
+        <MetricCard
+          label={t("skeleton.trafficK1")}
+          hint={t("skeleton.trafficK1Hint")}
+        />
+        <MetricCard
+          label={t("skeleton.trafficK2")}
+          hint={t("skeleton.trafficK2Hint")}
+        />
+        <MetricCard
+          label={t("skeleton.trafficK3")}
+          hint={t("skeleton.trafficK3Hint")}
+        />
+        <MetricCard
+          label={t("skeleton.trafficK4")}
+          hint={t("skeleton.trafficK4Hint")}
+        />
       </div>
 
       {/* 2. 流量趋势与转化漏斗（全宽） */}
       <section className="ds-card p-5">
         <SectionHeader
-          title="流量趋势与转化漏斗"
-          subtitle="访客数变化趋势与访问-加购-下单转化漏斗"
+          title={t("skeleton.trafficS1")}
+          subtitle={t("skeleton.trafficS1Sub")}
         />
         <div className="mt-4">
-          <EmptyState emoji="📈" source="流量趋势" />
+          <EmptyState emoji="📈" source={t("skeleton.trafficSrc1")} />
         </div>
       </section>
 
@@ -77,21 +91,21 @@ export default function TrafficPage() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <section className="ds-card p-5 lg:col-span-2">
           <SectionHeader
-            title="各渠道流量效果对比"
-            subtitle="自然/搜索/广告/社交/直链等渠道的访客与转化"
+            title={t("skeleton.trafficS2")}
+            subtitle={t("skeleton.trafficS2Sub")}
           />
           <div className="mt-4 overflow-x-auto">
-            <EmptyState emoji="🧭" source="渠道明细" />
+            <EmptyState emoji="🧭" source={t("skeleton.trafficSrc2")} />
           </div>
         </section>
 
         <section className="ds-card p-5">
           <SectionHeader
-            title="流量质量评分"
-            subtitle="基于跳出率、停留时长与转化的综合评分"
+            title={t("skeleton.trafficS3")}
+            subtitle={t("skeleton.trafficS3Sub")}
           />
           <div className="mt-4">
-            <EmptyState emoji="🎯" source="流量质量" />
+            <EmptyState emoji="🎯" source={t("skeleton.trafficSrc3")} />
           </div>
         </section>
       </div>
@@ -99,11 +113,11 @@ export default function TrafficPage() {
       {/* 5. 进店搜索热词 TOP20（底部全宽） */}
       <section className="ds-card p-5">
         <SectionHeader
-          title="进店搜索热词 TOP20"
-          subtitle="站内搜索关键词热度排行与对应访客数"
+          title={t("skeleton.trafficS4")}
+          subtitle={t("skeleton.trafficS4Sub")}
         />
         <div className="mt-4">
-          <EmptyState emoji="🔍" source="搜索热词" />
+          <EmptyState emoji="🔍" source={t("skeleton.trafficSrc4")} />
         </div>
       </section>
     </div>

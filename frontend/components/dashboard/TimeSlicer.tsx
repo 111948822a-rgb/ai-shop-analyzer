@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useT } from "@/lib/i18n/context";
 
 export type PeriodPreset = "7d" | "30d" | "90d" | "all" | "custom";
 
@@ -14,13 +15,7 @@ interface TimeSlicerProps {
   onChange: (preset: PeriodPreset, range: DateRange) => void;
 }
 
-const PRESETS: { key: PeriodPreset; label: string }[] = [
-  { key: "7d", label: "近 7 天" },
-  { key: "30d", label: "近 30 天" },
-  { key: "90d", label: "近 90 天" },
-  { key: "all", label: "全部" },
-  { key: "custom", label: "自定义" },
-];
+const PRESET_KEYS: PeriodPreset[] = ["7d", "30d", "90d", "all", "custom"];
 
 function toISODate(d: Date): string {
   const y = d.getFullYear();
@@ -42,6 +37,15 @@ export function presetToRange(preset: PeriodPreset): DateRange {
 export default function TimeSlicer({ value, onChange }: TimeSlicerProps) {
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
+  const t = useT();
+
+  const presetLabels: Record<PeriodPreset, string> = {
+    "7d": t("common.last7days"),
+    "30d": t("common.last30days"),
+    "90d": t("common.last90days"),
+    all: t("common.all"),
+    custom: t("common.custom"),
+  };
 
   const handlePreset = useCallback(
     (preset: PeriodPreset) => {
@@ -70,19 +74,19 @@ export default function TimeSlicer({ value, onChange }: TimeSlicerProps) {
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <span className="text-sm font-medium text-gray-600">数据时间：</span>
+      <span className="text-sm font-medium text-gray-600">{t("common.dataTime")}:</span>
       <div className="flex gap-1 rounded-lg bg-gray-100 p-1">
-        {PRESETS.map((p) => (
+        {PRESET_KEYS.map((p) => (
           <button
-            key={p.key}
-            onClick={() => handlePreset(p.key)}
+            key={p}
+            onClick={() => handlePreset(p)}
             className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
-              value === p.key
+              value === p
                 ? "bg-white text-indigo-600 shadow-sm"
                 : "text-gray-500 hover:text-gray-700"
             }`}
           >
-            {p.label}
+            {presetLabels[p]}
           </button>
         ))}
       </div>

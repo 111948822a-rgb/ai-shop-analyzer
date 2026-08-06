@@ -3,6 +3,8 @@
 // 用户分析页面（数据缺失骨架）
 // 后端暂无对应 API，所有数据区域显示空状态占位
 
+import { useT } from "@/lib/i18n/context";
+
 // ===== 指标卡 =====
 function MetricCard({ label, hint }: { label: string; hint?: string }) {
   return (
@@ -34,42 +36,54 @@ function SectionHeader({
 
 // 空状态
 function EmptyState({ emoji, source }: { emoji: string; source: string }) {
+  const t = useT();
   return (
     <div className="ds-empty">
       <div className="mb-3 text-4xl opacity-30">{emoji}</div>
-      <p className="ds-subtitle text-gray-400">暂无数据</p>
-      <p className="ds-caption mt-1">需对接{source}接口</p>
+      <p className="ds-subtitle text-gray-400">{t("common.noData")}</p>
+      <p className="ds-caption mt-1">{t("skeleton.needApi", { source })}</p>
     </div>
   );
 }
 
 export default function UsersPage() {
+  const t = useT();
   return (
     <div className="space-y-6">
       {/* 页面标题 */}
       <div>
-        <h1 className="ds-title">用户分析</h1>
-        <p className="ds-subtitle mt-1">
-          用户增长、画像分布、消费分层与复购行为
-        </p>
+        <h1 className="ds-title">{t("skeleton.usersTitle")}</h1>
+        <p className="ds-subtitle mt-1">{t("skeleton.usersSub")}</p>
       </div>
 
       {/* 1. 顶部4列指标卡 */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard label="累计粉丝数" hint="全店关注用户总数" />
-        <MetricCard label="新增买家数" hint="周期内首次下单用户" />
-        <MetricCard label="复购率" hint="二次下单用户占比" />
-        <MetricCard label="客户留存率" hint="周期内活跃留存占比" />
+        <MetricCard
+          label={t("skeleton.usersK1")}
+          hint={t("skeleton.usersK1Hint")}
+        />
+        <MetricCard
+          label={t("skeleton.usersK2")}
+          hint={t("skeleton.usersK2Hint")}
+        />
+        <MetricCard
+          label={t("skeleton.usersK3")}
+          hint={t("skeleton.usersK3Hint")}
+        />
+        <MetricCard
+          label={t("skeleton.usersK4")}
+          hint={t("skeleton.usersK4Hint")}
+        />
       </div>
 
       {/* 2. 用户增长趋势（全宽） */}
       <section className="ds-card p-5">
         <SectionHeader
-          title="用户增长趋势"
-          subtitle="新增粉丝与新增买家按日变化"
+          title={t("skeleton.usersS1")}
+          subtitle={t("skeleton.usersS1Sub")}
         />
         <div className="mt-4">
-          <EmptyState emoji="📈" source="用户增长趋势" />
+          <EmptyState emoji="📈" source={t("skeleton.usersSrc1")} />
         </div>
       </section>
 
@@ -77,21 +91,21 @@ export default function UsersPage() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <section className="ds-card p-5">
           <SectionHeader
-            title="用户性别与年龄分布"
-            subtitle="买家性别占比与年龄段构成"
+            title={t("skeleton.usersS2")}
+            subtitle={t("skeleton.usersS2Sub")}
           />
           <div className="mt-4">
-            <EmptyState emoji="👥" source="用户画像" />
+            <EmptyState emoji="👥" source={t("skeleton.usersSrc2")} />
           </div>
         </section>
 
         <section className="ds-card p-5">
           <SectionHeader
-            title="买家地域 TOP10"
-            subtitle="下单用户所在省市排行"
+            title={t("skeleton.usersS3")}
+            subtitle={t("skeleton.usersS3Sub")}
           />
           <div className="mt-4">
-            <EmptyState emoji="🗺️" source="地域分布" />
+            <EmptyState emoji="🗺️" source={t("skeleton.usersSrc3")} />
           </div>
         </section>
       </div>
@@ -100,21 +114,21 @@ export default function UsersPage() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <section className="ds-card p-5">
           <SectionHeader
-            title="用户消费能力分层"
-            subtitle="RFM 分群与客单价分层占比"
+            title={t("skeleton.usersS4")}
+            subtitle={t("skeleton.usersS4Sub")}
           />
           <div className="mt-4">
-            <EmptyState emoji="💎" source="消费分层" />
+            <EmptyState emoji="💎" source={t("skeleton.usersSrc4")} />
           </div>
         </section>
 
         <section className="ds-card p-5">
           <SectionHeader
-            title="复购行为分析"
-            subtitle="复购周期、复购次数与复购 GMV 占比"
+            title={t("skeleton.usersS5")}
+            subtitle={t("skeleton.usersS5Sub")}
           />
           <div className="mt-4">
-            <EmptyState emoji="🔁" source="复购分析" />
+            <EmptyState emoji="🔁" source={t("skeleton.usersSrc5")} />
           </div>
         </section>
       </div>

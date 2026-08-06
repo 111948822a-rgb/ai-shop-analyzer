@@ -18,6 +18,7 @@ import {
   type GmvPoint,
   type TopProduct,
 } from "@/lib/api";
+import { useT } from "@/lib/i18n/context";
 
 // ===== 设计规范常量（深色科技风） =====
 const COLOR_NEON = "#60A5FA"; // primary-400 霓虹蓝
@@ -155,6 +156,7 @@ function MetricCard({
 
 // ===== 主页面 =====
 export default function RealtimeScreenPage() {
+  const t = useT();
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [gmvTrend, setGmvTrend] = useState<GmvPoint[]>([]);
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
@@ -190,9 +192,9 @@ export default function RealtimeScreenPage() {
       setTopProducts(normalizeTopProducts(p));
       setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "数据加载失败");
+      setError(e instanceof Error ? e.message : t("common.dataLoadFailed"));
     }
-  }, []);
+  }, [t]);
 
   // 每 3 秒自动刷新
   useEffect(() => {
@@ -245,18 +247,18 @@ export default function RealtimeScreenPage() {
   const marqueeItems = useMemo(() => {
     const items: { icon: string; text: string }[] = [];
     if (todayGmv > 0)
-      items.push({ icon: "🎉", text: `今日 GMV 突破 ${fmtCurrency(todayGmv)}` });
+      items.push({ icon: "🎉", text: t("realtime.marqueeGMV", { value: fmtCurrency(todayGmv) }) });
     if (ordersKpi && ordersKpi.value > 0)
-      items.push({ icon: "📦", text: `今日订单 ${fmtInt(ordersKpi.value)} 单` });
+      items.push({ icon: "📦", text: t("realtime.marqueeOrders", { value: fmtInt(ordersKpi.value) }) });
     if (topProducts[0])
-      items.push({ icon: "🏆", text: `热销商品：${topProducts[0].product}` });
-    items.push({ icon: "💡", text: "数据每 3 秒自动刷新" });
-    items.push({ icon: "⚠️", text: "暂无异常预警" });
-    items.push({ icon: "🚀", text: "TikTok Shop 实时数据大屏运行中" });
+      items.push({ icon: "🏆", text: t("realtime.marqueeHot", { name: topProducts[0].product }) });
+    items.push({ icon: "💡", text: t("realtime.marqueeRefresh") });
+    items.push({ icon: "⚠️", text: t("realtime.marqueeNoAlert") });
+    items.push({ icon: "🚀", text: t("realtime.marqueeRunning") });
     return items.length
       ? items
-      : [{ icon: "📊", text: "实时数据大屏运行中" }];
-  }, [todayGmv, ordersKpi, topProducts]);
+      : [{ icon: "📊", text: t("realtime.marqueeDefault") }];
+  }, [todayGmv, ordersKpi, topProducts, t]);
 
   return (
     <div className="relative min-h-screen flex flex-col gap-3 overflow-hidden bg-screen p-3 text-slate-100 lg:p-4 lg:gap-4">
@@ -291,7 +293,7 @@ export default function RealtimeScreenPage() {
             </span>
           </div>
           <div className="flex items-center gap-2 text-xs text-slate-400">
-            <span>实时在线</span>
+            <span>{t("realtime.online")}</span>
             <span className="tabular-nums text-primary-300">-</span>
           </div>
         </div>
@@ -299,16 +301,16 @@ export default function RealtimeScreenPage() {
         {/* 中间标题 */}
         <div className="flex flex-col items-center">
           <h1 className="gradient-text text-xl font-bold tracking-wide lg:text-3xl">
-            TikTok店铺 实时数据大屏
+            {t("realtime.title")}
           </h1>
           <p className="mt-0.5 text-[11px] tracking-wider text-slate-400">
-            REAL-TIME DATA SCREEN · 每 3 秒自动刷新
+            {t("realtime.subtitle")}
           </p>
         </div>
 
         {/* 右侧：今日 GMV + 状态灯 */}
         <div className="flex min-w-0 flex-col items-end gap-1">
-          <div className="text-[11px] text-slate-400">今日累计 GMV</div>
+          <div className="text-[11px] text-slate-400">{t("realtime.todayGMV")}</div>
           <div className="text-2xl font-bold tabular-nums text-emerald-400 lg:text-3xl">
             <AnimatedNumber value={todayGmv} format={fmtCurrency} />
           </div>
@@ -317,7 +319,7 @@ export default function RealtimeScreenPage() {
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-75" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
             </span>
-            <span className="text-emerald-400">实时更新中</span>
+            <span className="text-emerald-400">{t("realtime.realtimeStatus")}</span>
           </div>
         </div>
       </header>
@@ -330,7 +332,7 @@ export default function RealtimeScreenPage() {
           <section className="screen-card relative overflow-hidden p-4 lg:p-5">
             <div className="absolute left-0 top-0 h-full w-1 bg-gradient-to-b from-primary-400 to-primary-600" />
             <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-400">实时 GMV 计数器</span>
+              <span className="text-xs text-slate-400">{t("realtime.liveGMV")}</span>
               <span className="text-[10px] uppercase tracking-wider text-primary-300">
                 Live GMV
               </span>
@@ -342,7 +344,7 @@ export default function RealtimeScreenPage() {
               <AnimatedNumber value={todayGmv} format={fmtCurrency} />
             </div>
             <div className="mt-2 flex items-center gap-2 text-xs">
-              <span className="text-slate-400">环比</span>
+              <span className="text-slate-400">{t("realtime.vsPrev")}</span>
               {gmvKpi && gmvKpi.delta_pct != null ? (
                 <span
                   className={
@@ -355,14 +357,14 @@ export default function RealtimeScreenPage() {
               ) : (
                 <span className="text-slate-500">—</span>
               )}
-              <span className="ml-auto text-slate-500">今日</span>
+              <span className="ml-auto text-slate-500">{t("realtime.today")}</span>
             </div>
           </section>
 
           {/* 实时订单流水 */}
           <section className="screen-card relative overflow-hidden p-4 lg:p-5">
             <div className="mb-3 flex items-center justify-between">
-              <span className="text-xs text-slate-400">实时订单流水</span>
+              <span className="text-xs text-slate-400">{t("realtime.liveOrders")}</span>
               <span className="text-[10px] uppercase tracking-wider text-primary-300">
                 Live Orders
               </span>
@@ -395,7 +397,7 @@ export default function RealtimeScreenPage() {
                   ))}
                 </div>
               ) : (
-                <EmptyBlock text="暂无订单流水" />
+                <EmptyBlock text={t("realtime.noOrders")} />
               )}
             </div>
           </section>
@@ -403,7 +405,7 @@ export default function RealtimeScreenPage() {
           {/* 今日实时趋势 */}
           <section className="screen-card relative overflow-hidden p-4 lg:p-5">
             <div className="mb-3 flex items-center justify-between">
-              <span className="text-xs text-slate-400">今日实时趋势</span>
+              <span className="text-xs text-slate-400">{t("realtime.trendTitle")}</span>
               <span className="text-[10px] uppercase tracking-wider text-primary-300">
                 GMV Trend
               </span>
@@ -452,7 +454,7 @@ export default function RealtimeScreenPage() {
                     />
                     <Tooltip
                       formatter={(v: number) => [fmtCurrency(v), "GMV"]}
-                      labelFormatter={(l: string) => `日期 ${l}`}
+                      labelFormatter={(l: string) => t("realtime.date", { label: l })}
                       contentStyle={{
                         background: "#1E293B",
                         border: "1px solid #334155",
@@ -475,7 +477,7 @@ export default function RealtimeScreenPage() {
                   </AreaChart>
                 </ResponsiveContainer>
               ) : (
-                <EmptyBlock text="暂无趋势数据" />
+                <EmptyBlock text={t("realtime.noTrendData")} />
               )}
             </div>
           </section>
@@ -486,18 +488,18 @@ export default function RealtimeScreenPage() {
           {/* 三行大数字卡片（订单 / 访客 / 转化率 / 客单价） */}
           <section className="grid grid-cols-2 gap-3 lg:gap-4">
             <MetricCard
-              label="今日订单数"
+              label={t("realtime.kpiOrders")}
               value={formatKpiValue(ordersKpi)}
               accent="primary"
             />
-            <MetricCard label="今日访客数" value="-" accent="slate" />
+            <MetricCard label={t("realtime.kpiVisitors")} value="-" accent="slate" />
             <MetricCard
-              label="今日转化率"
+              label={t("realtime.kpiCVR")}
               value={formatKpiValue(cvrKpi)}
               accent="emerald"
             />
             <MetricCard
-              label="客单价"
+              label={t("realtime.kpiAOV")}
               value={formatKpiValue(aovKpi)}
               accent="amber"
             />
@@ -507,7 +509,7 @@ export default function RealtimeScreenPage() {
           <section className="screen-card relative flex-1 overflow-hidden p-4 lg:p-5">
             <div className="mb-3 flex items-center justify-between">
               <span className="text-xs text-slate-400">
-                实时商品销量榜 TOP5
+                {t("realtime.top5Title")}
               </span>
               <span className="text-[10px] uppercase tracking-wider text-primary-300">
                 Top Products
@@ -553,19 +555,19 @@ export default function RealtimeScreenPage() {
                 })}
               </div>
             ) : (
-              <EmptyBlock text="暂无销量数据" />
+              <EmptyBlock text={t("realtime.noTopData")} />
             )}
           </section>
 
           {/* 地域热力分布 */}
           <section className="screen-card relative overflow-hidden p-4 lg:p-5">
             <div className="mb-3 flex items-center justify-between">
-              <span className="text-xs text-slate-400">地域热力分布</span>
+              <span className="text-xs text-slate-400">{t("realtime.geoTitle")}</span>
               <span className="text-[10px] uppercase tracking-wider text-primary-300">
                 Geo Heatmap
               </span>
             </div>
-            <EmptyBlock text="暂无地域数据" />
+            <EmptyBlock text={t("realtime.noGeoData")} />
           </section>
         </div>
 
@@ -574,39 +576,39 @@ export default function RealtimeScreenPage() {
           {/* 实时流量来源 */}
           <section className="screen-card relative overflow-hidden p-4 lg:p-5">
             <div className="mb-3 flex items-center justify-between">
-              <span className="text-xs text-slate-400">实时流量来源</span>
+              <span className="text-xs text-slate-400">{t("realtime.trafficTitle")}</span>
               <span className="text-[10px] uppercase tracking-wider text-primary-300">
                 Traffic Source
               </span>
             </div>
-            <EmptyBlock text="暂无流量数据" />
+            <EmptyBlock text={t("realtime.noTrafficData")} />
           </section>
 
           {/* 实时评论 / 咨询数 */}
           <section className="screen-card relative overflow-hidden p-4 lg:p-5">
             <div className="mb-3 flex items-center justify-between">
               <span className="text-xs text-slate-400">
-                实时评论 / 咨询数
+                {t("realtime.commentTitle")}
               </span>
               <span className="text-[10px] uppercase tracking-wider text-primary-300">
                 Comments
               </span>
             </div>
             <div className="screen-number text-slate-400">0</div>
-            <p className="mt-2 text-xs text-slate-500">暂无互动数据</p>
+            <p className="mt-2 text-xs text-slate-500">{t("realtime.noCommentData")}</p>
           </section>
 
           {/* 库存预警（红色闪烁） */}
           <section className="screen-card relative overflow-hidden p-4 lg:p-5">
             <div className="absolute left-0 top-0 h-full w-1 bg-gradient-to-b from-red-500 to-red-700" />
             <div className="mb-3 flex items-center justify-between">
-              <span className="text-xs text-slate-400">库存预警</span>
+              <span className="text-xs text-slate-400">{t("realtime.stockTitle")}</span>
               <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-red-400">
                 <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" />
                 Alert
               </span>
             </div>
-            <EmptyBlock text="暂无库存预警" />
+            <EmptyBlock text={t("realtime.noStockData")} />
           </section>
         </div>
       </div>

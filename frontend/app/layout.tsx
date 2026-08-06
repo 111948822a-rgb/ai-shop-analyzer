@@ -1,9 +1,10 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import { I18nProvider } from '@/lib/i18n/context'
 
 export const metadata: Metadata = {
   title: 'AI Shop Analyzer',
-  description: '跨境电商店铺数据分析与达人评估平台',
+  description: 'Cross-border e-commerce shop analytics & influencer evaluation platform',
 }
 
 export default function RootLayout({
@@ -12,9 +13,11 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="zh-CN">
+    <html lang="en">
       <body className="min-h-screen bg-gray-50">
-        {children}
+        <I18nProvider>
+          {children}
+        </I18nProvider>
       </body>
     </html>
   )

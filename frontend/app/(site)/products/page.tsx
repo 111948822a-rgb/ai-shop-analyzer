@@ -14,6 +14,7 @@ import {
   YAxis,
 } from "recharts";
 import { getTopProducts, type TopProduct } from "@/lib/api";
+import { useT } from "@/lib/i18n/context";
 
 // ===== 设计规范常量 =====
 const CHART_COLORS = ["#2563EB", "#3B82F6", "#60A5FA", "#93C5FD", "#BFDBFE", "#DBEAFE"];
@@ -24,10 +25,10 @@ const COLOR_WARNING = "#F59E0B";
 
 // ===== 顶部时间筛选器 =====
 const TIME_FILTERS: { label: string; days: number }[] = [
-  { label: "近7天", days: 7 },
-  { label: "近30天", days: 30 },
-  { label: "近90天", days: 90 },
-  { label: "近180天", days: 180 },
+  { label: "common.last7days", days: 7 },
+  { label: "common.last30days", days: 30 },
+  { label: "common.last90days", days: 90 },
+  { label: "common.last180days", days: 180 },
 ];
 
 // ===== 价格带分桶 =====
@@ -47,7 +48,7 @@ const PRICE_DISTRIBUTION_BANDS = [
 ];
 
 const PRICE_FILTERS = [
-  { label: "全部价格", value: "" },
+  { label: "products.allPrices", value: "" },
   ...PRICE_BANDS.map((b) => ({ label: b.label, value: b.key })),
 ];
 
@@ -86,6 +87,7 @@ type SortKey = "product" | "orders" | "gmv" | "price";
 type SortDir = "asc" | "desc";
 
 export default function ProductsPage() {
+  const t = useT();
   const [filterIdx, setFilterIdx] = useState(1); // 默认近30天
   const days = TIME_FILTERS[filterIdx].days;
 
@@ -109,7 +111,7 @@ export default function ProductsPage() {
       const list = await fetchTopProducts(100, days);
       setProducts(list);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "数据加载失败");
+      setError(e instanceof Error ? e.message : t("common.dataLoadFailed"));
     } finally {
       setLoading(false);
     }
@@ -148,7 +150,7 @@ export default function ProductsPage() {
     }
     // 分类筛选：按 category 字段过滤，"all" 时不过滤
     if (categoryFilter !== "all") {
-      list = list.filter((p) => (p.category || "未分类") === categoryFilter);
+      list = list.filter((p) => (p.category || t("common.uncategorized")) === categoryFilter);
     }
     // 排序
     list.sort((a, b) => {
@@ -160,7 +162,7 @@ export default function ProductsPage() {
       return sortDir === "asc" ? cmp : -cmp;
     });
     return list;
-  }, [pricedProducts, priceFilter, categoryFilter, sortKey, sortDir]);
+  }, [pricedProducts, priceFilter, categoryFilter, sortKey, sortDir, t]);
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) {
@@ -202,21 +204,21 @@ export default function ProductsPage() {
   const categories = useMemo(() => {
     const set = new Set<string>();
     products.forEach((p) => {
-      set.add(p.category || "未分类");
+      set.add(p.category || t("common.uncategorized"));
     });
     return Array.from(set).sort();
-  }, [products]);
+  }, [products, t]);
 
   // ===== 5.3 品类销售占比（按 category 聚合 GMV）=====
   const categoryData = useMemo(() => {
     const map = new Map<string, number>();
     products.forEach((p) => {
-      const cat = p.category || "未分类";
+      const cat = p.category || t("common.uncategorized");
       map.set(cat, (map.get(cat) ?? 0) + p.gmv);
     });
     return Array.from(map, ([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
-  }, [products]);
+  }, [products, t]);
 
   const categoryTotal = useMemo(
     () => categoryData.reduce((s, d) => s + d.value, 0),
@@ -274,23 +276,23 @@ export default function ProductsPage() {
 
   const sortLabel =
     sortKey === "product"
-      ? "商品名称"
+      ? t("products.colProduct")
       : sortKey === "orders"
-        ? "销量"
+        ? t("products.colSales")
         : sortKey === "price"
-          ? "客单价"
-          : "GMV";
+          ? t("products.colAOV")
+          : t("products.colGMV");
 
   return (
     <div className="space-y-6">
       {/* 顶部工具栏 */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="ds-title">商品分析</h1>
+          <h1 className="ds-title">{t("products.title")}</h1>
           <p className="ds-subtitle mt-1">
             {loading
-              ? "加载中…"
-              : `统计区间：近 ${days} 天 · 共 ${products.length} 个商品`}
+              ? t("common.loading")
+              : t("products.subtitle", { days, count: products.length })}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -305,12 +307,12 @@ export default function ProductsPage() {
                     : "text-gray-500 hover:text-gray-800"
                 }`}
               >
-                {f.label}
+                {t(f.label)}
               </button>
             ))}
           </div>
           <button onClick={handleExport} className="ds-btn-secondary">
-            <span aria-hidden>⭳</span> 导出 JSON
+            <span aria-hidden>⭳</span> {t("common.export")}
           </button>
         </div>
       </div>
@@ -335,25 +337,25 @@ export default function ProductsPage() {
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <OverviewCard
-            label="在售商品数"
+            label={t("products.activeProducts")}
             value={fmtInt(overview.total)}
-            hint="商品总数"
+            hint={t("products.activeHint")}
           />
           <OverviewCard
-            label="动销商品数"
+            label={t("products.soldProducts")}
             value={fmtInt(overview.sold)}
-            hint="有成交商品数"
+            hint={t("products.soldHint")}
           />
           <OverviewCard
-            label="动销率"
+            label={t("products.sellThrough")}
             value={fmtPercent(overview.sellThrough)}
-            hint="动销 / 在售"
+            hint={t("products.sellThroughHint")}
             tone={overview.sellThrough >= 50 ? "up" : "down"}
           />
           <OverviewCard
-            label="爆款商品数"
+            label={t("products.hotProducts")}
             value={fmtInt(overview.hot)}
-            hint="日均订单 > 50 单（估算）"
+            hint={t("products.hotHint")}
             tone={overview.hot > 0 ? "up" : undefined}
           />
         </div>
@@ -365,13 +367,13 @@ export default function ProductsPage() {
         <section className="ds-card p-5 lg:col-span-2">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="ds-title">商品销售明细</h2>
+              <h2 className="ds-title">{t("products.detailTitle")}</h2>
               <p className="ds-subtitle mt-1">
-                点击列头排序 · 按品类与客单价分析销售明细
+                {t("products.detailSub")}
               </p>
             </div>
             <button onClick={handleExport} className="ds-btn-secondary">
-              导出完整报表
+              {t("products.exportFull")}
             </button>
           </div>
 
@@ -382,7 +384,7 @@ export default function ProductsPage() {
               onChange={(e) => setCategoryFilter(e.target.value)}
               className="rounded-btn border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-700 outline-none focus:border-primary-400"
             >
-              <option value="all">全部分类</option>
+              <option value="all">{t("products.allCategories")}</option>
               {categories.map((c) => (
                 <option key={c} value={c}>
                   {c}
@@ -396,14 +398,14 @@ export default function ProductsPage() {
             >
               {PRICE_FILTERS.map((p) => (
                 <option key={p.value} value={p.value}>
-                  {p.label}
+                  {p.value === "" ? t(p.label) : p.label}
                 </option>
               ))}
             </select>
             <div className="flex items-center gap-1.5 ds-caption">
-              <span>排序：</span>
+              <span>{t("common.sortBy")}</span>
               <span className="text-gray-700">{sortLabel}</span>
-              <span>({sortDir === "asc" ? "升序" : "降序"})</span>
+              <span>({sortDir === "asc" ? t("common.asc") : t("common.desc")})</span>
             </div>
           </div>
 
@@ -424,16 +426,16 @@ export default function ProductsPage() {
                       active={sortKey === "product"}
                       dir={sortDir}
                     >
-                      商品名称
+                      {t("products.colProduct")}
                     </Th>
-                    <th className="px-3 py-2 text-left">品类</th>
+                    <th className="px-3 py-2 text-left">{t("products.colCategory")}</th>
                     <Th
                       onClick={() => toggleSort("orders")}
                       active={sortKey === "orders"}
                       dir={sortDir}
                       align="right"
                     >
-                      销量
+                      {t("products.colSales")}
                     </Th>
                     <Th
                       onClick={() => toggleSort("gmv")}
@@ -441,7 +443,7 @@ export default function ProductsPage() {
                       dir={sortDir}
                       align="right"
                     >
-                      GMV
+                      {t("products.colGMV")}
                     </Th>
                     <Th
                       onClick={() => toggleSort("price")}
@@ -449,7 +451,7 @@ export default function ProductsPage() {
                       dir={sortDir}
                       align="right"
                     >
-                      客单价
+                      {t("products.colAOV")}
                     </Th>
                   </tr>
                 </thead>
@@ -463,7 +465,7 @@ export default function ProductsPage() {
                         {p.product}
                       </td>
                       <td className="px-3 py-2 text-gray-700">
-                        {p.category || "未分类"}
+                        {p.category || t("common.uncategorized")}
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums text-gray-900">
                         {fmtInt(p.orders)}
@@ -482,11 +484,11 @@ export default function ProductsPage() {
               <div className="ds-empty">
                 <p className="ds-body">
                   {products.length === 0
-                    ? "暂无商品数据"
-                    : "无匹配商品，请调整筛选条件"}
+                    ? t("products.noProductData")
+                    : t("products.noMatchProduct")}
                 </p>
                 {products.length === 0 && (
-                  <p className="ds-caption mt-1">后端暂未返回 Top 商品列表</p>
+                  <p className="ds-caption mt-1">{t("products.noProductHint")}</p>
                 )}
               </div>
             )}
@@ -496,8 +498,8 @@ export default function ProductsPage() {
         {/* 5.3 品类销售占比（右侧 1/3） */}
         <section className="ds-card p-5">
           <div>
-            <h2 className="ds-title">品类销售占比</h2>
-            <p className="ds-subtitle mt-1">按品类划分 GMV 占比</p>
+            <h2 className="ds-title">{t("products.categoryTitle")}</h2>
+            <p className="ds-subtitle mt-1">{t("products.categorySub")}</p>
           </div>
           <div className="mt-4">
             {loading ? (
@@ -545,17 +547,17 @@ export default function ProductsPage() {
               </ResponsiveContainer>
             ) : (
               <div className="ds-empty">
-                <p className="ds-body">暂无品类数据</p>
+                <p className="ds-body">{t("products.noCategoryData")}</p>
               </div>
             )}
           </div>
           {categoryData.length > 0 && categoryTotal > 0 && (
             <p className="ds-body mt-3">
-              品类数：
+              {t("products.categoryCount")}
               <span className="font-semibold text-primary-600">
                 {categoryData.length}
               </span>
-              ，总 GMV {fmtCurrency(categoryTotal)}
+              {t("products.totalGMV", { value: fmtCurrency(categoryTotal) })}
             </p>
           )}
         </section>
@@ -567,16 +569,16 @@ export default function ProductsPage() {
         <section className="ds-card p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="ds-title">价格带销售分布</h2>
+              <h2 className="ds-title">{t("products.priceBandTitle")}</h2>
               <p className="ds-subtitle mt-1">
-                按估算客单价（GMV / 销量）分桶
+                {t("products.priceBandSub")}
               </p>
             </div>
             <div className="flex rounded-btn border border-gray-200 bg-white p-0.5">
               {(
                 [
-                  { k: "orders", l: "订单量" },
-                  { k: "gmv", l: "GMV" },
+                  { k: "orders", l: "products.metricOrders" },
+                  { k: "gmv", l: "products.metricGMV" },
                 ] as const
               ).map((m) => (
                 <button
@@ -588,7 +590,7 @@ export default function ProductsPage() {
                       : "text-gray-500 hover:text-gray-800"
                   }`}
                 >
-                  {m.l}
+                  {t(m.l)}
                 </button>
               ))}
             </div>
@@ -619,7 +621,7 @@ export default function ProductsPage() {
                   <Tooltip
                     formatter={(v: number) => [
                       priceMetric === "gmv" ? fmtCurrency(v) : fmtInt(v),
-                      priceMetric === "gmv" ? "GMV" : "订单量",
+                      priceMetric === "gmv" ? t("products.metricGMV") : t("products.metricOrders"),
                     ]}
                     contentStyle={{
                       borderRadius: 8,
@@ -643,22 +645,22 @@ export default function ProductsPage() {
               </ResponsiveContainer>
             ) : (
               <div className="ds-empty">
-                <p className="ds-body">暂无价格带数据</p>
-                <p className="ds-caption mt-1">需商品带有销量与 GMV 数据</p>
+                <p className="ds-body">{t("products.noPriceBandData")}</p>
+                <p className="ds-caption mt-1">{t("products.noPriceBandHint")}</p>
               </div>
             )}
           </div>
           {mainPriceBand && mainPriceBand[priceMetric] > 0 && (
             <p className="ds-body mt-3">
-              主力价格带：
+              {t("products.mainPriceBand")}
               <span className="font-semibold text-growth-600">
                 {mainPriceBand.label}
               </span>
-              ，{priceMetric === "gmv" ? "GMV" : "订单量"}{" "}
+              {` ${priceMetric === "gmv" ? t("products.metricGMV") : t("products.metricOrders")} `}
               {priceMetric === "gmv"
                 ? fmtCurrency(mainPriceBand.gmv)
                 : fmtInt(mainPriceBand.orders)}
-              （共 {mainPriceBand.count} 个商品）
+              {t("products.productCount", { count: mainPriceBand.count })}
             </p>
           )}
         </section>
@@ -666,9 +668,9 @@ export default function ProductsPage() {
         {/* 5.5 商品价格带分布（原库存预警位） */}
         <section className="ds-card p-5">
           <div>
-            <h2 className="ds-title">商品价格带分布</h2>
+            <h2 className="ds-title">{t("products.distributionTitle")}</h2>
             <p className="ds-subtitle mt-1">
-              按客单价分档统计商品数量
+              {t("products.distributionSub")}
             </p>
           </div>
           <div className="mt-4">
@@ -690,7 +692,7 @@ export default function ProductsPage() {
                     width={40}
                   />
                   <Tooltip
-                    formatter={(v: number) => [`${v} 个商品`, "商品数量"]}
+                    formatter={(v: number) => [t("products.tooltipCount", { v }), t("products.tooltipCountName")]}
                     contentStyle={{
                       borderRadius: 8,
                       border: "1px solid #e5e7eb",
@@ -713,18 +715,18 @@ export default function ProductsPage() {
               </ResponsiveContainer>
             ) : (
               <div className="ds-empty">
-                <p className="ds-body">暂无价格数据</p>
-                <p className="ds-caption mt-1">需商品带有客单价字段</p>
+                <p className="ds-body">{t("products.noPriceData")}</p>
+                <p className="ds-caption mt-1">{t("products.noPriceHint")}</p>
               </div>
             )}
           </div>
           {mainDistBand && mainDistBand.count > 0 && (
             <p className="ds-body mt-3">
-              主力价格带：
+              {t("products.mainPriceBand")}
               <span className="font-semibold text-growth-600">
                 {mainDistBand.label}
               </span>
-              ，共 {mainDistBand.count} 个商品
+              {t("products.totalProducts", { count: mainDistBand.count })}
             </p>
           )}
         </section>
@@ -732,8 +734,7 @@ export default function ProductsPage() {
 
       {/* 配色说明（辅助信息） */}
       <p className="ds-caption" aria-hidden>
-        图表配色：{CHART_COLORS.join(" · ")} · 主色 {COLOR_PRIMARY} · 增长{" "}
-        {COLOR_GROWTH} · 下降 {COLOR_DECLINE} · 预警 {COLOR_WARNING}
+        {t("common.chartColors", { colors: CHART_COLORS.join(" · "), primary: COLOR_PRIMARY, growth: COLOR_GROWTH, decline: COLOR_DECLINE, warning: COLOR_WARNING })}
       </p>
     </div>
   );
@@ -751,13 +752,14 @@ function OverviewCard({
   hint?: string;
   tone?: "up" | "down";
 }) {
+  const t = useT();
   return (
     <div className="ds-card-hover p-5">
       <p className="ds-caption">{label}</p>
       <p className="mt-2 text-2xl font-bold tabular-nums text-gray-900">{value}</p>
       <div className="mt-2 flex items-center gap-1.5">
-        {tone === "up" && <span className="ds-tag-up">↑ 良好</span>}
-        {tone === "down" && <span className="ds-tag-down">↓ 偏低</span>}
+        {tone === "up" && <span className="ds-tag-up">{t("products.goodTrend")}</span>}
+        {tone === "down" && <span className="ds-tag-down">{t("products.lowTrend")}</span>}
         {hint && <span className="ds-caption">{hint}</span>}
       </div>
     </div>

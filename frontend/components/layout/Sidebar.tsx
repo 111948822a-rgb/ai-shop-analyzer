@@ -3,23 +3,25 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import { useT } from "@/lib/i18n/context";
 
 const MENU = [
-  { label: "数据概览", href: "/dashboard", icon: "📊" },
-  { label: "销售分析", href: "/sales", icon: "💰" },
-  { label: "流量分析", href: "/traffic", icon: "👥" },
-  { label: "商品分析", href: "/products", icon: "📦" },
-  { label: "用户分析", href: "/users", icon: "🎯" },
-  { label: "营销分析", href: "/marketing", icon: "📣" },
-  { label: "达人合作", href: "/influencers", icon: "⭐" },
-  { label: "实时大屏", href: "/realtime", icon: "🖥️" },
-  { label: "报表中心", href: "/reports", icon: "📑" },
-  { label: "设置", href: "/settings", icon: "⚙️" },
+  { key: "dashboard", href: "/dashboard", icon: "📊" },
+  { key: "sales", href: "/sales", icon: "💰" },
+  { key: "traffic", href: "/traffic", icon: "👥" },
+  { key: "products", href: "/products", icon: "📦" },
+  { key: "users", href: "/users", icon: "🎯" },
+  { key: "marketing", href: "/marketing", icon: "📣" },
+  { key: "influencers", href: "/influencers", icon: "⭐" },
+  { key: "realtime", href: "/realtime", icon: "🖥️" },
+  { key: "reports", href: "/reports", icon: "📑" },
+  { key: "settings", href: "/settings", icon: "⚙️" },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const t = useT();
 
   return (
     <aside
@@ -43,7 +45,7 @@ export default function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
-              title={collapsed ? item.label : undefined}
+              title={collapsed ? t(`nav.${item.key}`) : undefined}
               className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors ${
                 active
                   ? "bg-sidebar-active text-white font-medium"
@@ -51,7 +53,7 @@ export default function Sidebar() {
               }`}
             >
               <span className="text-base leading-none">{item.icon}</span>
-              {!collapsed && <span className="truncate">{item.label}</span>}
+              {!collapsed && <span className="truncate">{t(`nav.${item.key}`)}</span>}
             </Link>
           );
         })}
@@ -62,7 +64,7 @@ export default function Sidebar() {
         onClick={() => setCollapsed(!collapsed)}
         className="flex items-center justify-center gap-2 border-t border-white/5 py-3 text-xs text-gray-500 hover:text-white"
       >
-        <span>{collapsed ? "▶" : "◀ 折叠"}</span>
+        <span>{collapsed ? "▶" : "◀"}</span>
       </button>
     </aside>
   );

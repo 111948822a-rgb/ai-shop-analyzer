@@ -33,6 +33,9 @@ import {
   type MiaodaInfluencer,
   type PeriodReport,
 } from "@/lib/api";
+import { useT } from "@/lib/i18n/context";
+
+type TFunc = (path: string, vars?: Record<string, string | number>) => string;
 
 const PIE_COLORS = ["#6366f1", "#22c55e", "#f59e0b", "#ef4444", "#06b6d4", "#a855f7"];
 
@@ -40,13 +43,14 @@ const PIE_COLORS = ["#6366f1", "#22c55e", "#f59e0b", "#ef4444", "#06b6d4", "#a85
 type SortKey = "followers" | "engagement_rate" | "conversion_rate" | "roi";
 type SortDir = "asc" | "desc";
 
-function fmtFollowers(n: number | null): string {
+function fmtFollowers(n: number | null, t: TFunc): string {
   if (n == null) return "—";
-  if (n >= 10000) return `${(n / 10000).toFixed(1)} 万`;
+  if (n >= 10000) return `${(n / 10000).toFixed(1)} ${t("common.wan")}`;
   return n.toLocaleString("zh-CN");
 }
 
 export default function InfluencersDashboardPage() {
+  const t = useT();
   const [data, setData] = useState<MiaodaDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -73,7 +77,7 @@ export default function InfluencersDashboardPage() {
       const d = await getMiaodaDashboard(undefined, range);
       setData(d);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "加载达人数据看板失败");
+      setError(e instanceof Error ? e.message : t("influencers.loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -104,7 +108,7 @@ export default function InfluencersDashboardPage() {
       });
       setReport(r);
     } catch (e) {
-      setReportError(e instanceof Error ? e.message : "生成报告失败");
+      setReportError(e instanceof Error ? e.message : t("common.reportFailed"));
     } finally {
       setReportLoading(false);
     }
@@ -133,7 +137,7 @@ export default function InfluencersDashboardPage() {
     }
   }
 
-  if (loading && !data) return <p className="text-gray-500">正在加载达人数据看板…</p>;
+  if (loading && !data) return <p className="text-gray-500">{t("influencers.loading")}</p>;
   if (error && !data) return <p className="text-red-600">{error}</p>;
   if (!data) return null;
 
@@ -169,18 +173,18 @@ export default function InfluencersDashboardPage() {
               href="/"
               className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
             >
-              <span aria-hidden>←</span> 返回主页
+              <span aria-hidden>←</span> {t("common.back")}
             </Link>
           </div>
-          <h1 className="text-2xl font-bold">达人数据看板</h1>
+          <h1 className="text-2xl font-bold">{t("influencers.title")}</h1>
           <p className="text-sm text-gray-500 mt-1">
-            数据来源：<span className="font-medium">{source === "miaoda" ? "秒搭系统" : "本地库"}</span>
+            {t("influencers.dataSource")}<span className="font-medium">{source === "miaoda" ? t("influencers.miaoda") : t("influencers.local")}</span>
             {!configured && (
               <span className="ml-2 text-amber-600">
-                （秒搭数据源未配置，当前为本地/示例数据）
+                {t("influencers.noMiaoda")}
               </span>
             )}
-            {loading && <span className="ml-2 text-indigo-500">刷新中…</span>}
+            {loading && <span className="ml-2 text-indigo-500">{t("common.refreshing")}</span>}
           </p>
         </div>
       </div>
@@ -195,17 +199,17 @@ export default function InfluencersDashboardPage() {
       {/* ---- 秒搭拉取失败提示 ---- */}
       {configured && source !== "miaoda" && miaodaError && (
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          <strong>秒搭数据拉取失败：</strong> {miaodaError}
+          <strong>{t("influencers.miaodaFailed")}</strong> {miaodaError}
         </div>
       )}
 
       {/* ---- KPI 卡片 ---- */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        <KpiCard label="达人总数" value={summary.total.toLocaleString("zh-CN")} />
-        <KpiCard label="总粉丝量" value={fmtFollowers(summary.total_followers)} />
-        <KpiCard label="平均互动率" value={`${avgEngagement}%`} />
+        <KpiCard label={t("influencers.totalInfluencers")} value={summary.total.toLocaleString("zh-CN")} />
+        <KpiCard label={t("influencers.totalFollowers")} value={fmtFollowers(summary.total_followers, t)} />
+        <KpiCard label={t("influencers.avgEngagement")} value={`${avgEngagement}%`} />
         <KpiCard
-          label="异常占比"
+          label={t("influencers.anomalyRate")}
           value={`${suspiciousRate}%`}
           danger={summary.suspicious_count > 0}
         />
@@ -215,7 +219,7 @@ export default function InfluencersDashboardPage() {
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>平台分布</CardTitle>
+            <CardTitle>{t("influencers.platformTitle")}</CardTitle>
           </CardHeader>
           <CardContent>
             {summary.platform_distribution.length ? (
@@ -240,14 +244,14 @@ export default function InfluencersDashboardPage() {
                 </ResponsiveContainer>
               </div>
             ) : (
-              <Empty />
+              <Empty text={t("common.noData")} />
             )}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>ROI 分布</CardTitle>
+            <CardTitle>{t("influencers.roiTitle")}</CardTitle>
           </CardHeader>
           <CardContent>
             {summary.roi_buckets.some((b) => b.count > 0) ? (
@@ -262,7 +266,7 @@ export default function InfluencersDashboardPage() {
                 </ResponsiveContainer>
               </div>
             ) : (
-              <Empty text="暂无 ROI 数据" />
+              <Empty text={t("influencers.noRoiData")} />
             )}
           </CardContent>
         </Card>
@@ -272,7 +276,7 @@ export default function InfluencersDashboardPage() {
       {summary.top_by_followers.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>粉丝量 Top 10</CardTitle>
+            <CardTitle>{t("influencers.topFollowers")}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-5">
@@ -287,7 +291,7 @@ export default function InfluencersDashboardPage() {
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-gray-900">{inf.name}</p>
                     <p className="text-xs text-gray-400">
-                      {inf.platform || "—"} · {fmtFollowers(inf.followers)}
+                      {inf.platform || "—"} · {fmtFollowers(inf.followers, t)}
                     </p>
                   </div>
                 </div>
@@ -301,23 +305,23 @@ export default function InfluencersDashboardPage() {
       <section className="ds-card p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="ds-title">达人明细列表</h2>
+            <h2 className="ds-title">{t("influencers.detailTitle")}</h2>
             <p className="ds-subtitle mt-1">
-              点击列头排序 · 共 {sortedItems.length} 位达人
+              {t("influencers.detailSub", { count: sortedItems.length })}
             </p>
           </div>
           <div className="flex items-center gap-1.5 ds-caption">
-            <span>排序：</span>
+            <span>{t("common.sortBy")}</span>
             <span className="text-gray-700">
               {sortKey === "followers"
-                ? "粉丝数"
+                ? t("influencers.sortFollowers")
                 : sortKey === "engagement_rate"
-                  ? "互动率"
+                  ? t("influencers.sortEngagement")
                   : sortKey === "conversion_rate"
-                    ? "转化率"
+                    ? t("influencers.sortConversion")
                     : "ROI"}
             </span>
-            <span>({sortDir === "asc" ? "升序" : "降序"})</span>
+            <span>({sortDir === "asc" ? t("common.asc") : t("common.desc")})</span>
           </div>
         </div>
 
@@ -326,15 +330,15 @@ export default function InfluencersDashboardPage() {
             <table className="w-full text-left text-[13px]">
               <thead className="border-b border-gray-200 bg-gray-50 text-xs text-gray-500">
                 <tr>
-                  <th className="px-3 py-2 text-left">头像 / 名称</th>
-                  <th className="px-3 py-2 text-left">平台</th>
+                  <th className="px-3 py-2 text-left">{t("influencers.colAvatar")} / {t("influencers.colName")}</th>
+                  <th className="px-3 py-2 text-left">{t("influencers.colPlatform")}</th>
                   <Th
                     onClick={() => toggleSort("followers")}
                     active={sortKey === "followers"}
                     dir={sortDir}
                     align="right"
                   >
-                    粉丝数
+                    {t("influencers.colFollowers")}
                   </Th>
                   <Th
                     onClick={() => toggleSort("engagement_rate")}
@@ -342,7 +346,7 @@ export default function InfluencersDashboardPage() {
                     dir={sortDir}
                     align="right"
                   >
-                    互动率
+                    {t("influencers.colEngagement")}
                   </Th>
                   <Th
                     onClick={() => toggleSort("conversion_rate")}
@@ -350,7 +354,7 @@ export default function InfluencersDashboardPage() {
                     dir={sortDir}
                     align="right"
                   >
-                    转化率
+                    {t("influencers.colConversion")}
                   </Th>
                   <Th
                     onClick={() => toggleSort("roi")}
@@ -360,8 +364,8 @@ export default function InfluencersDashboardPage() {
                   >
                     ROI
                   </Th>
-                  <th className="px-3 py-2 text-left">状态</th>
-                  <th className="px-3 py-2 text-left">垂直领域</th>
+                  <th className="px-3 py-2 text-left">{t("influencers.colStatus")}</th>
+                  <th className="px-3 py-2 text-left">{t("influencers.colCategory")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -394,7 +398,7 @@ export default function InfluencersDashboardPage() {
                       {inf.platform || "—"}
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums text-gray-900">
-                      {fmtFollowers(inf.followers)}
+                      {fmtFollowers(inf.followers, t)}
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums text-gray-900">
                       {inf.engagement_rate != null
@@ -411,9 +415,9 @@ export default function InfluencersDashboardPage() {
                     </td>
                     <td className="px-3 py-2">
                       {inf.is_suspicious ? (
-                        <span className="ds-tag-down">异常</span>
+                        <span className="ds-tag-down">{t("influencers.anomaly")}</span>
                       ) : (
-                        <span className="ds-tag-up">正常</span>
+                        <span className="ds-tag-up">{t("influencers.normal")}</span>
                       )}
                     </td>
                     <td className="px-3 py-2 text-gray-700">
@@ -425,7 +429,7 @@ export default function InfluencersDashboardPage() {
             </table>
           ) : (
             <div className="ds-empty">
-              <p className="ds-body">暂无达人明细数据，请先在秒搭中添加达人</p>
+              <p className="ds-body">{t("influencers.noDetail")}</p>
             </div>
           )}
         </div>
@@ -434,12 +438,12 @@ export default function InfluencersDashboardPage() {
       {/* ---- 手动生成报告 ---- */}
       <Card>
         <CardHeader>
-          <CardTitle>手动生成报告</CardTitle>
+          <CardTitle>{t("influencers.manualReport")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* 报告时间选择 */}
           <div>
-            <p className="mb-2 text-sm font-medium text-gray-600">选择报告时间段：</p>
+            <p className="mb-2 text-sm font-medium text-gray-600">{t("influencers.selectPeriod")}</p>
             <TimeSlicer value={reportPeriod} onChange={handleReportPeriodChange} />
           </div>
 
@@ -450,7 +454,7 @@ export default function InfluencersDashboardPage() {
               disabled={reportLoading}
               className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-50"
             >
-              {reportLoading ? "生成中…" : "生成报告"}
+              {reportLoading ? t("common.generating") : t("common.generate")}
             </button>
             {report && (
               <button
@@ -459,13 +463,13 @@ export default function InfluencersDashboardPage() {
                   const url = URL.createObjectURL(blob);
                   const a = document.createElement("a");
                   a.href = url;
-                  a.download = `达人报告_${report.period.label}.md`;
+                  a.download = `${t("influencers.reportFilename")}_${report.period.label}.md`;
                   a.click();
                   URL.revokeObjectURL(url);
                 }}
                 className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-600 transition hover:bg-gray-50"
               >
-                下载 Markdown
+                {t("influencers.downloadMd")}
               </button>
             )}
           </div>
@@ -482,10 +486,10 @@ export default function InfluencersDashboardPage() {
             <div className="space-y-3">
               <div className="flex items-center gap-2 border-b pb-2">
                 <Badge className="bg-green-100 text-green-700 border-transparent">
-                  已生成
+                  {t("influencers.generated")}
                 </Badge>
                 <span className="text-sm text-gray-500">
-                  {report.period.label} · 生成于 {new Date(report.generated_at).toLocaleString("zh-CN")}
+                  {t("influencers.generatedAt", { label: report.period.label, time: new Date(report.generated_at).toLocaleString("zh-CN") })}
                 </span>
               </div>
               <div className="prose prose-sm max-w-none rounded-lg border border-gray-100 bg-gray-50 p-4">
@@ -538,7 +542,7 @@ function KpiCard({
   );
 }
 
-function Empty({ text = "暂无数据" }: { text?: string }) {
+function Empty({ text = "" }: { text?: string }) {
   return (
     <div className="flex h-64 items-center justify-center text-sm text-gray-400">
       {text}

@@ -4,12 +4,14 @@ import { useCallback, useEffect, useState } from "react";
 import Sidebar from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
 import { getTikTokStatus } from "@/lib/api";
+import { useT } from "@/lib/i18n/context";
 
 export default function SiteLayout({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const [shopName, setShopName] = useState<string>();
   const [lastSync, setLastSync] = useState<string>();
   const [refreshing, setRefreshing] = useState(false);
+  const t = useT();
 
   const loadStatus = useCallback(async () => {
     try {
@@ -46,8 +48,8 @@ export default function SiteLayout({ children }: { children: React.ReactNode }) 
         {/* 底部状态栏 */}
         <footer className="flex h-8 items-center justify-between border-t border-gray-200 bg-gray-100 px-6 text-xs text-gray-400">
           <span>
-            数据来源：TikTok Shop Partner API
-            {lastSync ? ` · 最近同步 ${lastSync}` : ""}
+            {t("footer.dataSource")}
+            {lastSync ? ` · ${t("footer.lastSync", { time: lastSync })}` : ""}
           </span>
           <span>AI Shop Analyzer v0.2.0</span>
         </footer>

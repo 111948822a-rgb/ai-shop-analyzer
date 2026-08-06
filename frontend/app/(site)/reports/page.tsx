@@ -7,6 +7,7 @@ import {
   getAIReport,
   type AIReportResponse,
 } from "@/lib/api";
+import { useT } from "@/lib/i18n/context";
 
 const DAY_OPTIONS = [7, 30, 90, 180];
 
@@ -111,6 +112,7 @@ function DaySelector({
   onChange: (d: number) => void;
   disabled?: boolean;
 }) {
+  const t = useT();
   return (
     <div className="inline-flex rounded-btn border border-gray-200 bg-gray-50 p-0.5">
       {DAY_OPTIONS.map((d) => (
@@ -125,7 +127,7 @@ function DaySelector({
               : "text-gray-500 hover:text-gray-800"
           }`}
         >
-          近{d}天
+          {t("common.lastNDays", { n: d })}
         </button>
       ))}
     </div>
@@ -135,6 +137,7 @@ function DaySelector({
 /* ======================== 页面 ======================== */
 
 export default function ReportsPage() {
+  const t = useT();
   const [days, setDays] = useState(30);
   const [query, setQuery] = useState("");
   const [aiReport, setAiReport] = useState<AIReportResponse | null>(null);
@@ -167,7 +170,7 @@ export default function ReportsPage() {
       const r = await generateAIReport(days, query, true);
       setAiReport(r);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "报告生成失败");
+      setError(e instanceof Error ? e.message : t("common.reportFailed"));
     } finally {
       setGenerating(false);
     }
@@ -178,21 +181,21 @@ export default function ReportsPage() {
       {/* ============ 区块1：生成报告 ============ */}
       <section className="ds-card p-6">
         <div>
-          <h1 className="ds-title">AI 经营分析报告</h1>
+          <h1 className="ds-title">{t("reports.title")}</h1>
           <p className="ds-subtitle mt-1">
-            基于已同步的看板数据，由大模型自动生成经营分析报告
+            {t("reports.subtitle")}
           </p>
         </div>
 
         <div className="mt-5 space-y-4">
           <div className="flex flex-wrap items-center gap-3">
-            <span className="ds-body text-gray-600">时间范围</span>
+            <span className="ds-body text-gray-600">{t("reports.timeRange")}</span>
             <DaySelector value={days} onChange={setDays} disabled={generating} />
           </div>
 
           <div>
             <label htmlFor="report-query" className="ds-body text-gray-600">
-              额外关注点
+              {t("reports.focusPoint")}
             </label>
             <textarea
               id="report-query"
@@ -200,7 +203,7 @@ export default function ReportsPage() {
               onChange={(e) => setQuery(e.target.value)}
               disabled={generating}
               rows={3}
-              placeholder="如：哪些商品需要补货？哪个达人ROI最高？"
+              placeholder={t("reports.focusPlaceholder")}
               className="mt-1.5 w-full resize-y rounded-btn border border-gray-200 px-3 py-2 text-sm text-gray-700 outline-none transition placeholder:text-gray-400 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 disabled:bg-gray-50"
             />
           </div>
@@ -214,10 +217,10 @@ export default function ReportsPage() {
             >
               {generating ? (
                 <>
-                  <Spinner /> AI 分析中…
+                  <Spinner /> {t("reports.aiAnalyzing")}
                 </>
               ) : (
-                "生成报告"
+                t("reports.generate")
               )}
             </button>
             {aiReport && !reportRunning && aiReport.status !== "done" && (
@@ -230,7 +233,7 @@ export default function ReportsPage() {
         {generating && !aiReport && (
           <div className="mt-4 flex items-center gap-2 rounded-btn border border-primary-100 bg-primary-50 px-3 py-2 text-sm text-primary-700">
             <Spinner className="text-primary-600" />
-            AI 正在分析数据并生成报告，请稍候…
+            {t("reports.aiWait")}
           </div>
         )}
 
@@ -245,7 +248,7 @@ export default function ReportsPage() {
       {/* ============ 区块2：报告内容 ============ */}
       <section className="ds-card p-6">
         <div className="mb-4 flex items-center justify-between border-b border-gray-100 pb-2">
-          <h2 className="ds-title">报告内容</h2>
+          <h2 className="ds-title">{t("reports.contentTitle")}</h2>
           {aiReport && (
             <span className="ds-caption">report_id: {aiReport.report_id}</span>
           )}
@@ -272,9 +275,9 @@ export default function ReportsPage() {
                 <line x1="9" y1="17" x2="13" y2="17" />
               </svg>
             </div>
-            <p className="ds-body text-gray-500">暂无报告</p>
+            <p className="ds-body text-gray-500">{t("reports.noReport")}</p>
             <p className="ds-caption mt-1">
-              选择时间范围并点击「生成报告」开始分析
+              {t("reports.noReportHint")}
             </p>
           </div>
         )}
@@ -287,10 +290,10 @@ export default function ReportsPage() {
               className="inline-block h-8 w-8 animate-spin rounded-full border-2 border-primary-600 border-t-transparent"
             />
             <p className="ds-body mt-3 font-medium text-gray-700">
-              AI 正在分析数据并生成报告…
+              {t("reports.aiProcessing")}
             </p>
             <p className="ds-caption mt-1">
-              状态：{aiReport.status}，3 秒后自动刷新
+              {t("reports.statusHint", { status: aiReport.status })}
             </p>
             {/* 骨架屏占位 */}
             <div className="mt-5 w-full max-w-2xl space-y-2.5">
@@ -309,7 +312,7 @@ export default function ReportsPage() {
           <div className="flex items-start gap-2 rounded-btn border border-decline-100 bg-decline-50 px-3 py-2 text-sm text-decline-600">
             <span aria-hidden>⚠️</span>
             <span>
-              报告生成失败{aiReport.error ? `：${aiReport.error}` : "，未知错误"}
+              {aiReport.error ? t("reports.failed", { error: aiReport.error }) : t("reports.failedUnknown")}
             </span>
           </div>
         )}

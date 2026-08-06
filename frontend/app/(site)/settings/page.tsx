@@ -11,6 +11,9 @@ import {
   type TikTokSyncResult,
   type AIReportResponse,
 } from "@/lib/api";
+import { useT } from "@/lib/i18n/context";
+
+type TFunc = (path: string, vars?: Record<string, string | number>) => string;
 
 const DAY_OPTIONS = [7, 30, 90, 180];
 
@@ -23,15 +26,15 @@ function formatTime(s: string | null | undefined): string {
   return d.toLocaleString("zh-CN", { hour12: false });
 }
 
-function formatRemaining(hours: number | null): string {
+function formatRemaining(hours: number | null, t: TFunc): string {
   if (hours === null) return "—";
-  if (hours <= 0) return "已过期";
+  if (hours <= 0) return t("settings.expired");
   if (hours >= 24) {
     const days = Math.floor(hours / 24);
     const h = Math.round(hours % 24);
-    return h > 0 ? `${days} 天 ${h} 小时` : `${days} 天`;
+    return h > 0 ? t("sync.daysHours", { days, h }) : t("sync.days", { days });
   }
-  return `${hours.toFixed(1)} 小时`;
+  return t("sync.hours", { hours: hours.toFixed(1) });
 }
 
 type TokenState = {
@@ -40,25 +43,25 @@ type TokenState = {
   dot: string;
 };
 
-function getTokenState(t: TikTokStatus["token"]): TokenState {
+function getTokenState(token: TikTokStatus["token"], t: TFunc): TokenState {
   const expired =
-    !t.has_access_token || (t.remaining_hours !== null && t.remaining_hours <= 0);
+    !token.has_access_token || (token.remaining_hours !== null && token.remaining_hours <= 0);
   if (expired) {
     return {
-      label: "已过期",
+      label: t("settings.expired"),
       badge: "bg-decline-50 text-decline-600",
       dot: "bg-decline-500",
     };
   }
-  if (t.is_expiring_soon) {
+  if (token.is_expiring_soon) {
     return {
-      label: "即将过期",
+      label: t("settings.expiringSoon"),
       badge: "bg-warning-50 text-warning-600",
       dot: "bg-warning-500",
     };
   }
   return {
-    label: "有效",
+    label: t("settings.valid"),
     badge: "bg-growth-50 text-growth-600",
     dot: "bg-growth-500",
   };
@@ -160,10 +163,12 @@ function DaySelector({
   value,
   onChange,
   disabled,
+  t,
 }: {
   value: number;
   onChange: (d: number) => void;
   disabled?: boolean;
+  t: TFunc;
 }) {
   return (
     <div className="inline-flex rounded-btn border border-gray-200 bg-gray-50 p-0.5">
@@ -179,7 +184,7 @@ function DaySelector({
               : "text-gray-500 hover:text-gray-800"
           }`}
         >
-          {d}天
+          {t("sync.days", { days: d })}
         </button>
       ))}
     </div>
@@ -198,6 +203,7 @@ function InfoRow({ label, children }: { label: string; children: React.ReactNode
 /* ======================== 页面 ======================== */
 
 export default function SettingsPage() {
+  const t = useT();
   // TikTok 状态
   const [tkStatus, setTkStatus] = useState<TikTokStatus | null>(null);
   const [tkLoading, setTkLoading] = useState(true);
@@ -223,7 +229,7 @@ export default function SettingsPage() {
       const s = await getTikTokStatus();
       setTkStatus(s);
     } catch (e) {
-      setTkError(e instanceof Error ? e.message : "获取 TikTok 状态失败");
+      setTkError(e instanceof Error ? e.message : t("settings.loadStatusFailed"));
     } finally {
       setTkLoading(false);
     }
@@ -244,18 +250,27 @@ export default function SettingsPage() {
       if (r.status === "done" && r.result) {
         const { orders, products } = r.result;
         setSyncMsg(
-          `前台同步完成（${r.start} ~ ${r.end}）：订单 ${orders.inserted} 新增 / ${orders.updated} 更新 / ${orders.skipped} 跳过；商品 ${products.inserted} 新增 / ${products.updated} 更新 / ${products.skipped} 跳过。`
+          t("sync.fgComplete", {
+            start: r.start,
+            end: r.end,
+            inserted: orders.inserted,
+            updated: orders.updated,
+            skipped: orders.skipped,
+            pInserted: products.inserted,
+            pUpdated: products.updated,
+            pSkipped: products.skipped,
+          })
         );
       } else {
         setSyncMsg(
           r.message ??
-            `同步任务已在后台启动（${r.start} ~ ${r.end}），稍后请刷新查看最近同步时间。`
+            t("sync.bgStarted", { start: r.start, end: r.end })
         );
       }
       // 同步后刷新状态（更新最近同步时间）
       loadStatus();
     } catch (e) {
-      setSyncError(e instanceof Error ? e.message : "同步失败");
+      setSyncError(e instanceof Error ? e.message : t("common.syncFailed"));
     } finally {
       setSyncing(false);
     }
@@ -284,13 +299,13 @@ export default function SettingsPage() {
       const r = await generateAIReport(reportDays, reportQuery, true);
       setAiReport(r);
     } catch (e) {
-      setReportError(e instanceof Error ? e.message : "报告生成失败");
+      setReportError(e instanceof Error ? e.message : t("common.reportFailed"));
     } finally {
       setGenerating(false);
     }
   }
 
-  const tokenState = tkStatus?.token ? getTokenState(tkStatus.token) : null;
+  const tokenState = tkStatus?.token ? getTokenState(tkStatus.token, t) : null;
   const reportRunning =
     aiReport && (aiReport.status === "pending" || aiReport.status === "running");
 
@@ -300,9 +315,9 @@ export default function SettingsPage() {
       <section className="ds-card p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="ds-title">TikTok Shop 数据源配置</h2>
+            <h2 className="ds-title">{t("settings.tiktokTitle")}</h2>
             <p className="ds-subtitle mt-1">
-              管理 TikTok Partner API 授权状态与订单 / 商品数据同步
+              {t("settings.tiktokSub")}
             </p>
           </div>
           {tokenState && tkStatus?.configured && (
@@ -330,7 +345,7 @@ export default function SettingsPage() {
           </div>
         ) : (
           <dl className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <InfoRow label="店铺 ID">
+            <InfoRow label={t("settings.shopId")}>
               {tkStatus?.shop_id ? (
                 <code className="rounded-datalabel bg-gray-100 px-1.5 py-0.5 text-[12px]">
                   {tkStatus.shop_id}
@@ -339,20 +354,20 @@ export default function SettingsPage() {
                 "—"
               )}
             </InfoRow>
-            <InfoRow label="店铺名称">
+            <InfoRow label={t("settings.shopName")}>
               {tkStatus?.shop_name || "—"}
             </InfoRow>
-            <InfoRow label="Token 状态">
+            <InfoRow label={t("settings.tokenStatus")}>
               {tokenState ? tokenState.label : "—"}
             </InfoRow>
-            <InfoRow label="剩余有效时长">
-              {tkStatus?.token ? formatRemaining(tkStatus.token.remaining_hours) : "—"}
+            <InfoRow label={t("settings.validTime")}>
+              {tkStatus?.token ? formatRemaining(tkStatus.token.remaining_hours, t) : "—"}
             </InfoRow>
-            <InfoRow label="到期时间">
+            <InfoRow label={t("settings.expireTime")}>
               {tkStatus?.token ? formatTime(tkStatus.token.expires_at) : "—"}
             </InfoRow>
-            <InfoRow label="最近同步时间">
-              {tkStatus?.last_sync ? formatTime(tkStatus.last_sync) : "从未同步"}
+            <InfoRow label={t("settings.lastSync")}>
+              {tkStatus?.last_sync ? formatTime(tkStatus.last_sync) : t("settings.neverSync")}
             </InfoRow>
           </dl>
         )}
@@ -364,7 +379,7 @@ export default function SettingsPage() {
             <div className="mt-4 flex items-start gap-2 rounded-btn border border-warning-100 bg-warning-50 px-3 py-2 text-sm text-warning-600">
               <span aria-hidden>⚠️</span>
               <span>
-                Token 即将过期，剩余 {formatRemaining(tkStatus.token.remaining_hours)}，建议尽快续期以免数据同步中断。
+                {t("settings.tokenWarning", { time: formatRemaining(tkStatus.token.remaining_hours, t) })}
               </span>
             </div>
           )}
@@ -375,7 +390,7 @@ export default function SettingsPage() {
             <div className="mt-4 flex items-start gap-2 rounded-btn border border-decline-100 bg-decline-50 px-3 py-2 text-sm text-decline-600">
               <span aria-hidden>⚠️</span>
               <span>
-                未检测到有效 Access Token，请在后端 .env 配置 <code className="rounded-datalabel bg-white/60 px-1">TK_AUTH_ACCESS_TOKEN</code> / <code className="rounded-datalabel bg-white/60 px-1">TK_AUTH_REFRESH_TOKEN</code> 并完成授权。
+                {t("settings.noToken")}
               </span>
             </div>
           )}
@@ -383,7 +398,7 @@ export default function SettingsPage() {
         {/* 未配置 Partner API */}
         {tkStatus && !tkStatus.configured && (
           <div className="mt-4 rounded-btn border border-warning-100 bg-warning-50 px-3 py-2 text-sm text-warning-600">
-            未配置 TikTok Partner API。请在后端 .env 配置 <code className="rounded-datalabel bg-white/60 px-1">TK_PARTNER_APP_KEY</code> / <code className="rounded-datalabel bg-white/60 px-1">TK_PARTNER_APP_SECRET</code> / <code className="rounded-datalabel bg-white/60 px-1">TK_AUTH_SHOP_ID</code>，并完成授权后重启服务。
+            {t("settings.noConfig")}
           </div>
         )}
 
@@ -391,22 +406,22 @@ export default function SettingsPage() {
         {tkStatus?.configured && (
           <div className="mt-5 border-t border-gray-100 pt-5">
             <div className="flex flex-wrap items-center gap-3">
-              <span className="ds-body text-gray-600">同步范围</span>
-              <DaySelector value={syncDays} onChange={setSyncDays} disabled={syncing} />
+              <span className="ds-body text-gray-600">{t("settings.syncRange")}</span>
+              <DaySelector value={syncDays} onChange={setSyncDays} disabled={syncing} t={t} />
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={() => handleSync(true)}
                   disabled={syncing}
                   className="ds-btn-secondary"
-                  title="前台同步执行，立即返回结果（适合小数据量）"
+                  title={t("settings.syncNowTip")}
                 >
                   {syncing ? (
                     <>
-                      <Spinner /> 立即同步中…
+                      <Spinner /> {t("settings.syncNowLoading")}
                     </>
                   ) : (
-                    "立即同步"
+                    t("settings.syncNow")
                   )}
                 </button>
                 <button
@@ -414,14 +429,14 @@ export default function SettingsPage() {
                   onClick={() => handleSync(false)}
                   disabled={syncing}
                   className="ds-btn-primary"
-                  title="后台异步执行，立即返回，稍后刷新查看结果"
+                  title={t("settings.syncBgTip")}
                 >
                   {syncing ? (
                     <>
-                      <Spinner /> 后台同步中…
+                      <Spinner /> {t("settings.syncBgLoading")}
                     </>
                   ) : (
-                    "后台同步"
+                    t("settings.syncBg")
                   )}
                 </button>
               </div>
@@ -431,7 +446,7 @@ export default function SettingsPage() {
             {syncing && (
               <div className="mt-4 flex items-center gap-2 rounded-btn border border-primary-100 bg-primary-50 px-3 py-2 text-sm text-primary-700">
                 <Spinner className="text-primary-600" />
-                正在同步近 {syncDays} 天数据，请稍候…
+                {t("settings.syncingData", { days: syncDays })}
               </div>
             )}
 
@@ -450,19 +465,19 @@ export default function SettingsPage() {
             {syncResult?.result && !syncing && (
               <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="rounded-btn border border-gray-100 bg-gray-50 p-3">
-                  <div className="ds-caption">订单同步</div>
+                  <div className="ds-caption">{t("settings.orderSync")}</div>
                   <div className="mt-1.5 flex flex-wrap gap-3 text-xs">
-                    <span className="text-growth-600">新增 +{syncResult.result.orders.inserted}</span>
-                    <span className="text-primary-600">更新 {syncResult.result.orders.updated}</span>
-                    <span className="text-gray-400">跳过 {syncResult.result.orders.skipped}</span>
+                    <span className="text-growth-600">{t("settings.inserted")} +{syncResult.result.orders.inserted}</span>
+                    <span className="text-primary-600">{t("settings.updated")} {syncResult.result.orders.updated}</span>
+                    <span className="text-gray-400">{t("settings.skipped")} {syncResult.result.orders.skipped}</span>
                   </div>
                 </div>
                 <div className="rounded-btn border border-gray-100 bg-gray-50 p-3">
-                  <div className="ds-caption">商品同步</div>
+                  <div className="ds-caption">{t("settings.productSync")}</div>
                   <div className="mt-1.5 flex flex-wrap gap-3 text-xs">
-                    <span className="text-growth-600">新增 +{syncResult.result.products.inserted}</span>
-                    <span className="text-primary-600">更新 {syncResult.result.products.updated}</span>
-                    <span className="text-gray-400">跳过 {syncResult.result.products.skipped}</span>
+                    <span className="text-growth-600">{t("settings.inserted")} +{syncResult.result.products.inserted}</span>
+                    <span className="text-primary-600">{t("settings.updated")} {syncResult.result.products.updated}</span>
+                    <span className="text-gray-400">{t("settings.skipped")} {syncResult.result.products.skipped}</span>
                   </div>
                 </div>
               </div>
@@ -475,24 +490,24 @@ export default function SettingsPage() {
       <section className="ds-card p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="ds-title">AI 经营分析报告</h2>
+            <h2 className="ds-title">{t("settings.aiTitle")}</h2>
             <p className="ds-subtitle mt-1">
-              基于已同步的看板数据，由大模型自动生成经营分析报告
+              {t("settings.aiSub")}
             </p>
           </div>
         </div>
 
         <div className="mt-5 space-y-3">
           <div className="flex flex-wrap items-center gap-3">
-            <span className="ds-body text-gray-600">数据范围</span>
-            <DaySelector value={reportDays} onChange={setReportDays} disabled={generating} />
+            <span className="ds-body text-gray-600">{t("settings.dataRange")}</span>
+            <DaySelector value={reportDays} onChange={setReportDays} disabled={generating} t={t} />
           </div>
 
           <input
             type="text"
             value={reportQuery}
             onChange={(e) => setReportQuery(e.target.value)}
-            placeholder="可选：额外关注点，如「重点分析退款原因」「达人 ROI 优化建议」"
+            placeholder={t("settings.focusPlaceholder")}
             className="w-full rounded-btn border border-gray-200 px-3 py-2 text-sm text-gray-700 outline-none transition focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
           />
 
@@ -505,10 +520,10 @@ export default function SettingsPage() {
             >
               {generating ? (
                 <>
-                  <Spinner /> AI 分析中…
+                  <Spinner /> {t("settings.aiAnalyzing")}
                 </>
               ) : (
-                "生成报告"
+                t("settings.generateReport")
               )}
             </button>
             {aiReport && !reportRunning && aiReport.status !== "done" && (
@@ -521,7 +536,7 @@ export default function SettingsPage() {
         {generating && !aiReport && (
           <div className="mt-4 flex items-center gap-2 rounded-btn border border-primary-100 bg-primary-50 px-3 py-2 text-sm text-primary-700">
             <Spinner className="text-primary-600" />
-            AI 正在分析数据并生成报告，请稍候…
+            {t("settings.aiWait")}
           </div>
         )}
 
@@ -529,14 +544,14 @@ export default function SettingsPage() {
         {aiReport && reportRunning && (
           <div className="mt-4 flex items-center gap-2 rounded-btn border border-primary-100 bg-primary-50 px-3 py-2 text-sm text-primary-700">
             <Spinner className="text-primary-600" />
-            报告生成中（状态：{aiReport.status}），3 秒后自动刷新…
+            {t("settings.reportStatus", { status: aiReport.status })}
           </div>
         )}
 
         {/* 生成失败 */}
         {aiReport?.status === "failed" && (
           <div className="mt-4 rounded-btn border border-decline-100 bg-decline-50 px-3 py-2 text-sm text-decline-600">
-            ⚠️ 报告生成失败{aiReport.error ? `：${aiReport.error}` : ""}
+            {t("settings.reportError", { error: aiReport.error ? `: ${aiReport.error}` : "" })}
           </div>
         )}
 
@@ -544,7 +559,7 @@ export default function SettingsPage() {
         {aiReport?.status === "done" && aiReport.content_md && (
           <div className="mt-4 rounded-btn border border-gray-100 bg-white p-4">
             <div className="mb-3 flex items-center justify-between border-b border-gray-100 pb-2">
-              <span className="ds-caption">报告内容</span>
+              <span className="ds-caption">{t("settings.reportContent")}</span>
               <span className="ds-caption">report_id: {aiReport.report_id}</span>
             </div>
             <div className="text-[13px]">
@@ -565,21 +580,21 @@ export default function SettingsPage() {
 
       {/* ============ 区块3：系统信息 ============ */}
       <section className="ds-card p-6">
-        <h2 className="ds-title">系统信息</h2>
-        <p className="ds-subtitle mt-1">当前系统版本与运行环境</p>
+        <h2 className="ds-title">{t("settings.sysTitle")}</h2>
+        <p className="ds-subtitle mt-1">{t("settings.sysSub")}</p>
         <dl className="mt-4 divide-y divide-gray-100">
           <div className="flex py-2.5">
-            <dt className="ds-caption w-32 shrink-0">数据来源</dt>
+            <dt className="ds-caption w-32 shrink-0">{t("settings.dataSource")}</dt>
             <dd className="ds-body text-gray-900">TikTok Shop Partner API</dd>
           </div>
           <div className="flex py-2.5">
-            <dt className="ds-caption w-32 shrink-0">版本号</dt>
+            <dt className="ds-caption w-32 shrink-0">{t("settings.version")}</dt>
             <dd className="ds-body text-gray-900">v0.2.0</dd>
           </div>
           <div className="flex py-2.5">
-            <dt className="ds-caption w-32 shrink-0">数据库</dt>
+            <dt className="ds-caption w-32 shrink-0">{t("settings.database")}</dt>
             <dd className="ds-body text-gray-900">
-              PostgreSQL（生产） / SQLite（开发）
+              {t("settings.pgProd")} / {t("settings.sqliteDev")}
             </dd>
           </div>
         </dl>

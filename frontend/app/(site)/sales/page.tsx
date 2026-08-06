@@ -21,6 +21,7 @@ import {
   type GmvPoint,
   type Kpi,
 } from "@/lib/api";
+import { useT } from "@/lib/i18n/context";
 
 // ===== 设计规范常量 =====
 const CHART_COLORS = ["#2563EB", "#3B82F6", "#60A5FA", "#93C5FD", "#BFDBFE", "#DBEAFE"];
@@ -31,24 +32,24 @@ const COLOR_WARNING = "#F59E0B";
 
 // ===== 时间筛选器（API 仅支持 days 参数，故按天数映射）=====
 const TIME_FILTERS: { label: string; days: number }[] = [
-  { label: "今日", days: 1 },
-  { label: "昨日", days: 1 },
-  { label: "近7天", days: 7 },
-  { label: "近30天", days: 30 },
-  { label: "本月", days: 30 },
-  { label: "上月", days: 30 },
+  { label: "common.today", days: 1 },
+  { label: "common.yesterday", days: 1 },
+  { label: "common.last7days", days: 7 },
+  { label: "common.last30days", days: 30 },
+  { label: "common.thisMonth", days: 30 },
+  { label: "common.lastMonth", days: 30 },
 ];
 
 // 趋势维度切换（当前 API 仅 GMV 有序列数据，其余维度展示空状态）
 const TREND_METRICS = [
-  { key: "gmv", label: "GMV" },
-  { key: "orders", label: "订单数" },
-  { key: "buyers", label: "买家数" },
-  { key: "aov", label: "客单价" },
+  { key: "gmv", label: "sales.metricGMV" },
+  { key: "orders", label: "sales.metricOrders" },
+  { key: "buyers", label: "sales.metricBuyers" },
+  { key: "aov", label: "sales.metricAOV" },
 ] as const;
 type TrendMetric = (typeof TREND_METRICS)[number]["key"];
 
-const WEEKDAYS = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+const WEEKDAYS = ["sales.sun", "sales.mon", "sales.tue", "sales.wed", "sales.thu", "sales.fri", "sales.sat"];
 
 // ===== 工具函数 =====
 function fmtCurrency(n: number | null | undefined): string {
@@ -94,6 +95,7 @@ function isoWeekKey(dateStr: string): string {
 
 // ===== 主页面 =====
 export default function SalesPage() {
+  const t = useT();
   const [filterIdx, setFilterIdx] = useState(3); // 默认"近30天"
   const days = TIME_FILTERS[filterIdx].days;
 
@@ -117,7 +119,7 @@ export default function SalesPage() {
       setOverview(o);
       setGmvTrend(g);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "数据加载失败");
+      setError(e instanceof Error ? e.message : t("common.dataLoadFailed"));
     } finally {
       setLoading(false);
     }
@@ -164,10 +166,10 @@ export default function SalesPage() {
     if (!hasHour) return [];
     return Array.from({ length: 24 }, (_, h) => ({
       hour: h,
-      label: `${h}点`,
+      label: t("sales.hourLabel", { h }),
       value: map.get(h) ?? 0,
     }));
-  }, [gmvTrend]);
+  }, [gmvTrend, t]);
 
   const hourlyPeak = useMemo(() => {
     if (!hourlyData.length) return null;
@@ -189,12 +191,12 @@ export default function SalesPage() {
       counts[w] += 1;
     });
     return WEEKDAYS.map((name, i) => ({
-      weekday: name,
+      weekday: t(name),
       value: sums[i],
       avg: counts[i] ? sums[i] / counts[i] : 0,
       count: counts[i],
     }));
-  }, [gmvTrend]);
+  }, [gmvTrend, t]);
 
   const weeklyMax = useMemo(() => {
     if (!weeklyData.length) return null;
@@ -223,7 +225,7 @@ export default function SalesPage() {
   function handleExport() {
     const payload = {
       exported_at: new Date().toISOString(),
-      filter: TIME_FILTERS[filterIdx].label,
+      filter: t(TIME_FILTERS[filterIdx].label),
       days,
       period: overview?.period ?? null,
       previous_period: overview?.previous_period ?? null,
@@ -236,7 +238,7 @@ export default function SalesPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `sales-${TIME_FILTERS[filterIdx].label}-${Date.now()}.json`;
+    a.download = `sales-${t(TIME_FILTERS[filterIdx].label)}-${Date.now()}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -248,11 +250,11 @@ export default function SalesPage() {
       {/* 顶部工具栏 */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="ds-title">销售分析</h1>
+          <h1 className="ds-title">{t("sales.title")}</h1>
           <p className="ds-subtitle mt-1">
             {overview
-              ? `统计区间 ${overview.period.start} ~ ${overview.period.end}（近 ${overview.period.days} 天）`
-              : "加载中…"}
+              ? t("sales.period", { start: overview.period.start, end: overview.period.end, days: overview.period.days })
+              : t("common.loading")}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -267,12 +269,12 @@ export default function SalesPage() {
                     : "text-gray-500 hover:text-gray-800"
                 }`}
               >
-                {f.label}
+                {t(f.label)}
               </button>
             ))}
           </div>
           <button onClick={handleExport} className="ds-btn-secondary">
-            <span aria-hidden>⭳</span> 导出 JSON
+            <span aria-hidden>⭳</span> {t("common.export")}
           </button>
         </div>
       </div>
@@ -303,7 +305,7 @@ export default function SalesPage() {
         </div>
       ) : (
         <div className="ds-card ds-empty">
-          <p className="ds-body">暂无 KPI 数据</p>
+          <p className="ds-body">{t("sales.noKpiData")}</p>
         </div>
       )}
 
@@ -311,8 +313,8 @@ export default function SalesPage() {
       <section className="ds-card p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="ds-title">销售趋势明细</h2>
-            <p className="ds-subtitle mt-1">支持区间缩放，可切换维度与时间粒度</p>
+            <h2 className="ds-title">{t("sales.trendTitle")}</h2>
+            <p className="ds-subtitle mt-1">{t("sales.trendSub")}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex rounded-btn border border-gray-200 bg-white p-0.5">
@@ -326,15 +328,15 @@ export default function SalesPage() {
                       : "text-gray-500 hover:text-gray-800"
                   }`}
                 >
-                  {m.label}
+                  {t(m.label)}
                 </button>
               ))}
             </div>
             <div className="flex rounded-btn border border-gray-200 bg-white p-0.5">
               {(
                 [
-                  { k: "day", l: "按日" },
-                  { k: "week", l: "按周" },
+                  { k: "day", l: "common.byDay" },
+                  { k: "week", l: "common.byWeek" },
                 ] as const
               ).map((g) => (
                 <button
@@ -346,7 +348,7 @@ export default function SalesPage() {
                       : "text-gray-500 hover:text-gray-800"
                   }`}
                 >
-                  {g.l}
+                  {t(g.l)}
                 </button>
               ))}
             </div>
@@ -357,7 +359,7 @@ export default function SalesPage() {
                 onChange={(e) => setComparePrev(e.target.checked)}
                 className="h-3.5 w-3.5"
               />
-              叠加上期
+              {t("sales.comparePrev")}
             </label>
           </div>
         </div>
@@ -390,7 +392,7 @@ export default function SalesPage() {
                 />
                 <Tooltip
                   formatter={(v: number) => [fmtCurrency(v), "GMV"]}
-                  labelFormatter={(l: string) => `时间：${l}`}
+                  labelFormatter={(l: string) => t("sales.timeLabel", { l })}
                   contentStyle={{
                     borderRadius: 8,
                     border: "1px solid #e5e7eb",
@@ -431,14 +433,14 @@ export default function SalesPage() {
             <div className="ds-empty">
               <p className="ds-body">
                 {metric === "gmv"
-                  ? "暂无 GMV 趋势数据"
-                  : "暂无该维度的趋势数据，需同步更多维度数据"}
+                  ? t("sales.noGMVTrend")
+                  : t("sales.noMetricTrend")}
               </p>
             </div>
           )}
           {comparePrev && (
             <p className="ds-caption mt-2">
-              ⓘ 当前 API 仅返回本期 GMV 序列，环比上期数据暂不可用
+              ⓘ {t("sales.apiHint")}
             </p>
           )}
         </div>
@@ -449,8 +451,8 @@ export default function SalesPage() {
         {/* 3.3 时段分布 */}
         <section className="ds-card p-5">
           <div>
-            <h2 className="ds-title">24小时销售分布</h2>
-            <p className="ds-subtitle mt-1">按小时聚合 GMV，高亮高峰时段</p>
+            <h2 className="ds-title">{t("sales.hourlyTitle")}</h2>
+            <p className="ds-subtitle mt-1">{t("sales.hourlySub")}</p>
           </div>
           <div className="mt-4">
             {loading ? (
@@ -497,20 +499,20 @@ export default function SalesPage() {
               </ResponsiveContainer>
             ) : (
               <div className="ds-empty">
-                <p className="ds-body">数据不足以按小时聚合</p>
+                <p className="ds-body">{t("sales.noHourlyData")}</p>
                 <p className="ds-caption mt-1">
-                  当前 GMV 趋势仅含日期维度，无小时信息
+                  {t("sales.noHourlyHint")}
                 </p>
               </div>
             )}
           </div>
           {hourlyPeak && hourlyPeak.value > 0 && (
             <p className="ds-body mt-3">
-              高峰时段：
+              {t("sales.peakHour")}
               <span className="font-semibold text-decline-600">
                 {hourlyPeak.label}
               </span>
-              ，GMV {fmtCurrency(hourlyPeak.value)}
+              {t("sales.peakGmvSuffix", { value: fmtCurrency(hourlyPeak.value) })}
             </p>
           )}
         </section>
@@ -518,8 +520,8 @@ export default function SalesPage() {
         {/* 3.4 周度分布 */}
         <section className="ds-card p-5">
           <div>
-            <h2 className="ds-title">周度销售规律</h2>
-            <p className="ds-subtitle mt-1">周一至周日 GMV 总量与日均</p>
+            <h2 className="ds-title">{t("sales.weeklyTitle")}</h2>
+            <p className="ds-subtitle mt-1">{t("sales.weeklySub")}</p>
           </div>
           <div className="mt-4">
             {loading ? (
@@ -563,20 +565,20 @@ export default function SalesPage() {
               </ResponsiveContainer>
             ) : (
               <div className="ds-empty">
-                <p className="ds-body">暂无周度数据</p>
+                <p className="ds-body">{t("sales.noWeeklyData")}</p>
               </div>
             )}
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-4 ds-body">
             <span>
-              日均 GMV：
+              {t("sales.avgGMV")}
               <span className="font-semibold text-primary-600">
                 {fmtCurrency(weeklyAvg)}
               </span>
             </span>
             {weeklyMax && weeklyMax.value > 0 && (
               <span>
-                最高：
+                {t("sales.highest")}
                 <span className="font-semibold text-growth-600">
                   {weeklyMax.weekday}
                 </span>
@@ -585,7 +587,7 @@ export default function SalesPage() {
             )}
             {weeklyMin && weeklyMin.value > 0 && (
               <span>
-                最低：
+                {t("sales.lowest")}
                 <span className="font-semibold text-decline-600">
                   {weeklyMin.weekday}
                 </span>
@@ -601,13 +603,13 @@ export default function SalesPage() {
         {/* 3.5 订单状态分布 */}
         <section className="ds-card p-5">
           <div>
-            <h2 className="ds-title">订单状态占比</h2>
-            <p className="ds-subtitle mt-1">各状态订单数量与金额</p>
+            <h2 className="ds-title">{t("sales.statusTitle")}</h2>
+            <p className="ds-subtitle mt-1">{t("sales.statusSub")}</p>
           </div>
           <div className="mt-4">
             <div className="ds-empty">
-              <p className="ds-body">暂无数据，需同步更多维度数据</p>
-              <p className="ds-caption mt-1">后端暂未提供订单状态维度 API</p>
+              <p className="ds-body">{t("sales.noStatusData")}</p>
+              <p className="ds-caption mt-1">{t("sales.noStatusHint")}</p>
             </div>
           </div>
         </section>
@@ -615,15 +617,15 @@ export default function SalesPage() {
         {/* 3.6 支付方式分析 */}
         <section className="ds-card p-5 lg:col-span-2">
           <div>
-            <h2 className="ds-title">支付方式构成</h2>
+            <h2 className="ds-title">{t("sales.paymentTitle")}</h2>
             <p className="ds-subtitle mt-1">
-              COD 货到付款 / 信用卡 / 电子钱包 / 银行转账
+              {t("sales.paymentSub")}
             </p>
           </div>
           <div className="mt-4">
             <div className="ds-empty">
-              <p className="ds-body">暂无数据，需同步更多维度数据</p>
-              <p className="ds-caption mt-1">后端暂未提供支付方式维度 API</p>
+              <p className="ds-body">{t("sales.noPaymentData")}</p>
+              <p className="ds-caption mt-1">{t("sales.noPaymentHint")}</p>
             </div>
           </div>
         </section>
@@ -631,8 +633,7 @@ export default function SalesPage() {
 
       {/* 配色说明（仅供调试/审查，保留为辅助信息） */}
       <p className="ds-caption" aria-hidden>
-        图表配色：{CHART_COLORS.join(" · ")} · 主色 {COLOR_PRIMARY} · 增长 {COLOR_GROWTH} · 下降{" "}
-        {COLOR_DECLINE} · 预警 {COLOR_WARNING}
+        {t("common.chartColors", { colors: CHART_COLORS.join(" · "), primary: COLOR_PRIMARY, growth: COLOR_GROWTH, decline: COLOR_DECLINE, warning: COLOR_WARNING })}
       </p>
     </div>
   );
@@ -640,6 +641,7 @@ export default function SalesPage() {
 
 // ===== KPI 卡片（含迷你趋势图） =====
 function KpiCard({ kpi, spark }: { kpi: Kpi; spark: GmvPoint[] }) {
+  const t = useT();
   const hasDelta =
     kpi.delta_pct !== null && kpi.delta_pct !== undefined;
   const delta = kpi.delta_pct ?? 0;
@@ -671,7 +673,7 @@ function KpiCard({ kpi, spark }: { kpi: Kpi; spark: GmvPoint[] }) {
         ) : (
           <span className={tagClass}>—</span>
         )}
-        <span className="ds-caption">环比</span>
+        <span className="ds-caption">{t("common.vsPrev")}</span>
       </div>
       <div className="mt-3 h-10">
         {sparkData.length > 1 ? (
