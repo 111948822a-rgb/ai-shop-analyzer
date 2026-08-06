@@ -12,7 +12,7 @@ import hmac
 import json
 import logging
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 import requests
@@ -184,11 +184,16 @@ class TikTokShopPartnerAPI:
         而是拉全量后在 Python 侧按 start_date/end_date 过滤。
         """
         if start_date is None:
-            start_date = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+            start_date = (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%d")
         if end_date is None:
-            end_date = datetime.now().strftime("%Y-%m-%d")
-        t_from = int(datetime.strptime(start_date, "%Y-%m-%d").timestamp())
-        t_to = int(datetime.strptime(end_date, "%Y-%m-%d").timestamp()) + 86399
+            end_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        # 关键：start_date/end_date 按 UTC 解释，与 TikTok 后台口径一致
+        t_from = int(
+            datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp()
+        )
+        t_to = int(
+            datetime.strptime(end_date, "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp()
+        ) + 86399
 
         all_orders: List[Dict] = []
         page_size = 100
@@ -267,6 +272,13 @@ class TikTokShopPartnerAPI:
 
 # ----------------------------- 字段映射 -----------------------------
 def _parse_tiktok_datetime(value: Any) -> Optional[datetime]:
+    """把 TikTok 返回的时间值解析为 naive datetime（统一按 UTC 存，与 TK 后台对齐）。
+
+    TikTok API 的 create_time / paid_time 等都是 UTC 秒级时间戳。
+    旧代码用 datetime.fromtimestamp(ts) 在本地时区机器上会得到本地墙钟时间，
+    导致数据库里存的时间比 UTC 早 8 小时，与 TikTok 后台口径错位。
+    现统一存 UTC naive datetime，看板统计也按 UTC 算窗口。
+    """
     if not value:
         return None
     s = str(value).strip()
@@ -275,7 +287,8 @@ def _parse_tiktok_datetime(value: Any) -> Optional[datetime]:
             ts = int(s)
             if ts > 1_000_000_000_000:  # 毫秒
                 ts //= 1000
-            return datetime.fromtimestamp(ts)
+            # 用 UTC 解释时间戳，去掉 tzinfo 存为 naive（DB 无时区）
+            return datetime.fromtimestamp(ts, tz=timezone.utc).replace(tzinfo=None)
         except (ValueError, OSError):
             return None
     for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%d"):

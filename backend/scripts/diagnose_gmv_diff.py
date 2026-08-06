@@ -111,12 +111,12 @@ def main():
     print(f"    {'UTC(TK后台)':<14}{uc_orders:>8}{uc_qty:>12}{uc_gmv:>16.2f}{uc_gmv_all:>14.2f}")
     print(f"    {'差异(本地-UTC)':<14}{lo_orders-uc_orders:>8}{lo_qty-uc_qty:>12}{lo_gmv-uc_gmv:>16.2f}")
 
-    # ---- 数据库近7天统计（系统实际展示的口径）----
-    print(f"\n[4] 数据库近7天统计（系统看板实际口径，按 paid_at 本地时区）:")
+    # ---- 数据库近7天统计（系统看板实际口径，按 UTC，与 TK 后台对齐）----
+    print(f"\n[4] 数据库近7天统计（系统看板实际口径，按 paid_at UTC）:")
     db = SessionLocal()
     try:
-        db_start = datetime.now() - timedelta(days=7)
-        db_end = datetime.now() + timedelta(days=1)
+        db_start = datetime.utcnow() - timedelta(days=7)
+        db_end = datetime.utcnow() + timedelta(days=1)
         rows = db.query(StandardOrder).filter(
             StandardOrder.platform == Platform.TIKTOK,
             StandardOrder.paid_at >= db_start,

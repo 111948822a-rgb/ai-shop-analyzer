@@ -27,8 +27,9 @@ def _window(days: int) -> tuple[datetime, datetime, datetime, datetime]:
     """返回 (当前窗口起, 当前窗口止=含今, 上一窗口起, 上一窗口止)。
 
     当前窗口 = [now-days, now+1天)，上一窗口等长左移。
+    统一用 UTC，与 TikTok 后台口径一致（后台按 UTC 算"近N天"）。
     """
-    now = datetime.now()
+    now = datetime.utcnow()
     end_exclusive = now + timedelta(days=1)          # 含今天一整天
     start = end_exclusive - timedelta(days=days)
     prev_end_exclusive = start
@@ -232,7 +233,13 @@ def top_products(
                 ),
                 0.0,
             ).label("gmv"),
-            func.count(StandardOrder.id).label("orders"),
+            # 销量 = Σquantity（成交件数），排除退款单，对齐 TikTok 后台"商品成交件数"
+            func.coalesce(
+                func.sum(
+                    func.cast(StandardOrder.status != OrderStatus.REFUNDED, Integer) * StandardOrder.quantity
+                ),
+                0,
+            ).label("orders"),
             # LEFT JOIN StandardProduct 补充 category / price（按 product_id + platform 关联，
             # 用 MAX 聚合以兼容按 product_name 分组）
             func.max(StandardProduct.category).label("category"),
