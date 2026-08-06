@@ -18,6 +18,7 @@ export const translations = {
       asc: "Asc",
       desc: "Desc",
       all: "All",
+      allShops: "All Shops",
       custom: "Custom",
       dataTime: "Data time",
       back: "Back to Home",
@@ -67,6 +68,7 @@ export const translations = {
       realtime: "Real-time",
       reports: "Reports",
       settings: "Settings",
+      shop: "Shop",
     },
     // ===== Dashboard =====
     dashboard: {
@@ -493,6 +495,7 @@ export const translations = {
       asc: "升序",
       desc: "降序",
       all: "全部",
+      allShops: "全部店铺",
       custom: "自定义",
       dataTime: "数据时间",
       back: "返回主页",
@@ -542,6 +545,7 @@ export const translations = {
       realtime: "实时大屏",
       reports: "报表中心",
       settings: "设置",
+      shop: "店铺",
     },
     dashboard: {
       title: "数据概览",

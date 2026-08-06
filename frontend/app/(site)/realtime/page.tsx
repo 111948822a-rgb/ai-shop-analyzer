@@ -19,6 +19,7 @@ import {
   type TopProduct,
 } from "@/lib/api";
 import { useT } from "@/lib/i18n/context";
+import { useShop } from "@/lib/shop/context";
 
 // ===== 设计规范常量（深色科技风） =====
 const COLOR_NEON = "#60A5FA"; // primary-400 霓虹蓝
@@ -157,6 +158,7 @@ function MetricCard({
 // ===== 主页面 =====
 export default function RealtimeScreenPage() {
   const t = useT();
+  const { shopIds } = useShop();
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [gmvTrend, setGmvTrend] = useState<GmvPoint[]>([]);
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
@@ -183,9 +185,9 @@ export default function RealtimeScreenPage() {
   const load = useCallback(async () => {
     try {
       const [o, g, p] = await Promise.all([
-        getDashboardOverview(1),
-        getGmvTrend(7),
-        getTopProducts(5, 7),
+        getDashboardOverview(1, shopIds),
+        getGmvTrend(7, shopIds),
+        getTopProducts(5, 7, shopIds),
       ]);
       setOverview(o);
       setGmvTrend(g);
@@ -194,7 +196,7 @@ export default function RealtimeScreenPage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : t("common.dataLoadFailed"));
     }
-  }, [t]);
+  }, [t, shopIds]);
 
   // 每 3 秒自动刷新
   useEffect(() => {

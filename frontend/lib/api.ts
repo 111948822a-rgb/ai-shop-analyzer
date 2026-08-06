@@ -220,8 +220,14 @@ export interface ShippingStats {
   avg_delivery_hours: number;
 }
 
-export async function getGeoDistribution(days = 30): Promise<GeoDistributionItem[]> {
-  const res = await fetch(`${BASE}/api/dashboard/geo-distribution?days=${days}`, {
+export async function getGeoDistribution(
+  days = 30,
+  shopIds?: string[]
+): Promise<GeoDistributionItem[]> {
+  const qs = shopIds && shopIds.length
+    ? `&shop_ids=${encodeURIComponent(shopIds.join(","))}`
+    : "";
+  const res = await fetch(`${BASE}/api/dashboard/geo-distribution?days=${days}${qs}`, {
     cache: "no-store",
   });
   if (!res.ok) throw new Error("获取地域分布失败");
@@ -229,8 +235,14 @@ export async function getGeoDistribution(days = 30): Promise<GeoDistributionItem
   return d.items;
 }
 
-export async function getOrderStatus(days = 30): Promise<OrderStatusItem[]> {
-  const res = await fetch(`${BASE}/api/dashboard/order-status?days=${days}`, {
+export async function getOrderStatus(
+  days = 30,
+  shopIds?: string[]
+): Promise<OrderStatusItem[]> {
+  const qs = shopIds && shopIds.length
+    ? `&shop_ids=${encodeURIComponent(shopIds.join(","))}`
+    : "";
+  const res = await fetch(`${BASE}/api/dashboard/order-status?days=${days}${qs}`, {
     cache: "no-store",
   });
   if (!res.ok) throw new Error("获取订单状态分布失败");
@@ -238,8 +250,14 @@ export async function getOrderStatus(days = 30): Promise<OrderStatusItem[]> {
   return d.items;
 }
 
-export async function getOrderTypes(days = 30): Promise<OrderTypeItem[]> {
-  const res = await fetch(`${BASE}/api/dashboard/order-types?days=${days}`, {
+export async function getOrderTypes(
+  days = 30,
+  shopIds?: string[]
+): Promise<OrderTypeItem[]> {
+  const qs = shopIds && shopIds.length
+    ? `&shop_ids=${encodeURIComponent(shopIds.join(","))}`
+    : "";
+  const res = await fetch(`${BASE}/api/dashboard/order-types?days=${days}${qs}`, {
     cache: "no-store",
   });
   if (!res.ok) throw new Error("获取订单类型失败");
@@ -247,8 +265,14 @@ export async function getOrderTypes(days = 30): Promise<OrderTypeItem[]> {
   return d.items;
 }
 
-export async function getShippingStats(days = 30): Promise<ShippingStats> {
-  const res = await fetch(`${BASE}/api/dashboard/shipping-stats?days=${days}`, {
+export async function getShippingStats(
+  days = 30,
+  shopIds?: string[]
+): Promise<ShippingStats> {
+  const qs = shopIds && shopIds.length
+    ? `&shop_ids=${encodeURIComponent(shopIds.join(","))}`
+    : "";
+  const res = await fetch(`${BASE}/api/dashboard/shipping-stats?days=${days}${qs}`, {
     cache: "no-store",
   });
   if (!res.ok) throw new Error("获取物流统计失败");

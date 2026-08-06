@@ -484,11 +484,13 @@ def order_types(
 @router.get("/shipping-stats")
 def shipping_stats(
     days: int = Query(30, ge=1, le=365),
+    shop_ids: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ) -> dict:
     """按物流商分组统计订单数，并计算平均配送时长（delivery_time - rts_time，小时）。"""
     start, end_ex, _, _ = _window(days)
     where_clauses = [StandardOrder.paid_at >= start, StandardOrder.paid_at < end_ex]
+    where_clauses.extend(_shop_filter_conditions(shop_ids.split(",") if shop_ids else None))
     # 按物流商分组统计订单数
     provider_stmt = (
         select(

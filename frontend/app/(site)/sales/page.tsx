@@ -22,6 +22,7 @@ import {
   type Kpi,
 } from "@/lib/api";
 import { useT } from "@/lib/i18n/context";
+import { useShop } from "@/lib/shop/context";
 
 // ===== 设计规范常量 =====
 const CHART_COLORS = ["#2563EB", "#3B82F6", "#60A5FA", "#93C5FD", "#BFDBFE", "#DBEAFE"];
@@ -96,6 +97,7 @@ function isoWeekKey(dateStr: string): string {
 // ===== 主页面 =====
 export default function SalesPage() {
   const t = useT();
+  const { shopIds } = useShop();
   const [filterIdx, setFilterIdx] = useState(3); // 默认"近30天"
   const days = TIME_FILTERS[filterIdx].days;
 
@@ -113,8 +115,8 @@ export default function SalesPage() {
     setError(null);
     try {
       const [o, g] = await Promise.all([
-        getDashboardOverview(days),
-        getGmvTrend(days),
+        getDashboardOverview(days, shopIds),
+        getGmvTrend(days, shopIds),
       ]);
       setOverview(o);
       setGmvTrend(g);
@@ -123,7 +125,7 @@ export default function SalesPage() {
     } finally {
       setLoading(false);
     }
-  }, [days]);
+  }, [days, shopIds]);
 
   useEffect(() => {
     load();

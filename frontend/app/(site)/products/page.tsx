@@ -15,6 +15,7 @@ import {
 } from "recharts";
 import { getTopProducts, type TopProduct } from "@/lib/api";
 import { useT } from "@/lib/i18n/context";
+import { useShop } from "@/lib/shop/context";
 
 // ===== 设计规范常量 =====
 const CHART_COLORS = ["#2563EB", "#3B82F6", "#60A5FA", "#93C5FD", "#BFDBFE", "#DBEAFE"];
@@ -69,8 +70,8 @@ function fmtPercent(n: number | null | undefined): string {
 }
 
 // ===== 兼容多种返回结构（TopProduct[] | { products } | { items } | { data }）=====
-async function fetchTopProducts(limit: number, days: number): Promise<TopProduct[]> {
-  const r = await getTopProducts(limit, days);
+async function fetchTopProducts(limit: number, days: number, shopIds?: string[]): Promise<TopProduct[]> {
+  const r = await getTopProducts(limit, days, shopIds);
   if (Array.isArray(r)) return r as TopProduct[];
   if (r && typeof r === "object") {
     const obj = r as unknown as Record<string, unknown>;
@@ -88,6 +89,7 @@ type SortDir = "asc" | "desc";
 
 export default function ProductsPage() {
   const t = useT();
+  const { shopIds } = useShop();
   const [filterIdx, setFilterIdx] = useState(1); // 默认近30天
   const days = TIME_FILTERS[filterIdx].days;
 
@@ -108,14 +110,14 @@ export default function ProductsPage() {
     setLoading(true);
     setError(null);
     try {
-      const list = await fetchTopProducts(100, days);
+      const list = await fetchTopProducts(100, days, shopIds);
       setProducts(list);
     } catch (e) {
       setError(e instanceof Error ? e.message : t("common.dataLoadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [days]);
+  }, [days, shopIds]);
 
   useEffect(() => {
     load();

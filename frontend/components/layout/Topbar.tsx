@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useT } from "@/lib/i18n/context";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { ShopSelector } from "@/components/ShopSelector";
 
 const CRUMB_KEYS: Record<string, string> = {
   "/dashboard": "nav.dashboard",
@@ -19,7 +20,6 @@ const CRUMB_KEYS: Record<string, string> = {
 };
 
 export default function Topbar({
-  shopName,
   lastSync,
   onRefresh,
   refreshing,
@@ -58,13 +58,8 @@ export default function Topbar({
         {/* 语言切换器 */}
         <LanguageSwitcher />
 
-        {/* 店铺 */}
-        <div className="hidden items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 md:flex">
-          <span className="text-xs text-gray-400">Shop</span>
-          <span className="max-w-[160px] truncate text-sm font-medium text-gray-700">
-            {shopName ?? "TikTok Shop"}
-          </span>
-        </div>
+        {/* 店铺切换器 */}
+        <ShopSelector />
 
         {/* 数据更新时间 */}
         {lastSync && (

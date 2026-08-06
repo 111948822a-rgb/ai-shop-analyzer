@@ -37,6 +37,7 @@ import {
   type TopProduct,
 } from "@/lib/api";
 import { useT } from "@/lib/i18n/context";
+import { useShop } from "@/lib/shop/context";
 
 const CHART_COLORS = ["#2563EB", "#3B82F6", "#60A5FA", "#93C5FD", "#BFDBFE", "#DBEAFE"];
 const TRAFFIC_COLORS = ["#2563EB", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#9CA3AF"];
@@ -65,19 +66,20 @@ export default function DashboardPage() {
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
 
   const t = useT();
+  const { shopIds } = useShop();
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const [ov, tr, tp, gd, os, ot, sh] = await Promise.all([
-        getDashboardOverview(days),
-        getGmvTrend(days),
-        getTopProducts(10, days),
-        getGeoDistribution(days),
-        getOrderStatus(days),
-        getOrderTypes(days),
-        getShippingStats(days),
+        getDashboardOverview(days, shopIds),
+        getGmvTrend(days, shopIds),
+        getTopProducts(10, days, shopIds),
+        getGeoDistribution(days, shopIds),
+        getOrderStatus(days, shopIds),
+        getOrderTypes(days, shopIds),
+        getShippingStats(days, shopIds),
       ]);
       setOverview(ov);
       setTrend(tr);
@@ -91,7 +93,7 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [days, t]);
+  }, [days, t, shopIds]);
 
   useEffect(() => {
     load();
